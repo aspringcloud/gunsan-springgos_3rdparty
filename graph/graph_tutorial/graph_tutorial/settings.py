@@ -25,8 +25,7 @@ SECRET_KEY = '))_th#$kj4k82x#@57#0e^^b7^k((7nql^8#=cl_d%@cu2koet'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['222.114.39.8']
 
 # Application definition
 
@@ -39,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'tutorial',
+    'sslserver',
 ]
 # </InstalledAppsSnippet>
 
