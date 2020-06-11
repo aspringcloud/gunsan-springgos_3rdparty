@@ -1,0 +1,20 @@
+{
+    "apps": [      
+      {
+        "name": "websocket",
+        "cwd": "/ws/src/app_to_django/scripts",
+        "args": "",
+        "script": "websocket.sh",
+        "exec_mode": "fork",
+        "exec_interpreter": "bash"
+      },
+      {
+        "name": "eta",
+        "cwd": "/ws/src/app_to_django/scripts",
+        "args": "",
+        "script": "eta.sh",
+        "exec_mode": "fork",
+        "exec_interpreter": "bash"
+      }
+    ]
+  }

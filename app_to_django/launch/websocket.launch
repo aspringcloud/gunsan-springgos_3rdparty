@@ -1,0 +1,11 @@
+<!--
+  Standard launch file. for more information check http://wiki.ros.org/roslaunch/XML.
+ -->
+<launch>
+
+  <!-- Launch ROS nodes in group -->
+  <!-- Args -->
+  <!-- Launch answer server node -->
+  <!-- Ref http://wiki.ros.org/roslaunch/XML/node#A.3Cnode.3E_tag -->  
+  <node pkg="app_to_django" type="websocket.py" name="websocket" output='screen'/>
+</launch>

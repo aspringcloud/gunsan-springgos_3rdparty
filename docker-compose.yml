@@ -1,0 +1,75 @@
+version: '2'
+services:
+  master:
+    image: ros:melodic
+    container_name: master
+    ports:
+      - "11311:11311"
+    volumes:
+      - roslogs:/root/.ros/log/
+    command:
+      - roscore
+    networks:
+      rosnet:
+        ipv4_address: 172.19.0.100
+    environment:
+      - "ROS_IP=172.19.0.100"
+
+  app_to_django:
+    build: ./app_to_django
+    container_name: app_to_django
+    depends_on:
+      - master
+    environment:
+      - "ROS_HOSTNAME=app_to_django"
+      - "ROS_MASTER_URI=http://master:11311"
+    volumes:
+      - roslogs:/root/.ros/log/
+      - ${PWD}/app_to_django:/ws/src/app_to_django
+    command: 
+      - /bin/bash
+      - -c 
+      - | 
+        chmod +x /ws/src/app_to_django/src/websocket.py
+        chmod +x /ws/src/app_to_django/src/eta.py
+        pm2-runtime /ws/src/app_to_django/pm2.json
+    restart: always
+    networks:
+      rosnet:
+        ipv4_address: 172.19.0.101
+  
+  graph:
+    build: ./graph
+    container_name: graph
+    depends_on:
+      - master
+    environment:
+      - "ROS_HOSTNAME=graph"
+      - "ROS_MASTER_URI=http://master:11311"
+    volumes:
+      - roslogs:/root/.ros/log/
+      - ${PWD}/graph:/ws/src/graph   
+    restart: always
+    command: 
+      - /bin/bash
+      - -c 
+      - |
+        python3 manage.py migrate
+        python3 manage.py runserver 0.0.0.0:9300
+    ports:
+      - 9300:9300
+    networks:
+      rosnet:
+        ipv4_address: 172.19.0.102
+
+volumes:
+  roslogs:
+
+networks:
+  rosnet:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 172.19.0.0/24
+
