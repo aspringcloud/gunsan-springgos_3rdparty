@@ -54,7 +54,7 @@ services:
     command: 
       - /bin/bash
       - -c 
-      - |
+      - |        
         python3 manage.py migrate
         python3 manage.py runsslserver 0.0.0.0:8300 --certificate djangossl.cert --key djangossl.key
 

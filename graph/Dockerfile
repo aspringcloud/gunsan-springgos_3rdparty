@@ -3,6 +3,16 @@ FROM ros:melodic
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV DEBIAN_FRONTEND noninteractive
+
+## Ensure UTF-8
+RUN apt-get update && apt-get install -y locales
+RUN locale-gen  en_US.UTF-8
+ENV LANG        en_US.UTF-8
+ENV LC_ALL      en_US.UTF-8
+
+## UTC TIME -> KST
+RUN ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime
 
 # install psycopg2 dependencies
 RUN apt-get update && apt-get upgrade -y && apt-get -y install \

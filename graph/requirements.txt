@@ -13,3 +13,9 @@ six==1.14.0
 sqlparse==0.3.1
 urllib3==1.25.8
 django-sslserver
+msal
+py-trees
+kafka-python
+geopy
+opencv-python
+smopy
