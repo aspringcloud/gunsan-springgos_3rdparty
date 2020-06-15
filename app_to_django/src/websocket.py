@@ -16,6 +16,89 @@ import rospy
 import smach
 from smach import CBState
 import states as sp
+from SimpleWebSocketServer import WebSocket, SimpleWebSocketServer, SimpleSSLWebSocketServer
+
+from threading import Thread
+import time
+import json
+import logging
+import Queue
+import ssl
+from smach import CBState
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s (%(threadName)-2s) %(message)s',)
+clients = [] # connections = {} 동일한 역할
+
+class Connection(WebSocket):
+
+    def __init__(self, server, sock, address):
+        WebSocket.__init__(self, server, sock, address)
+        self.player = None
+        self.queue = None
+
+    def handleMessage(self):
+        self.queue.put([self, "text", self.data])
+        for client in clients:
+            if client != self:
+                client.sendMessage(self.address[0] + u' - ' + self.data)
+
+
+    def handleConnected(self):
+        print (self.address, 'connected')
+        for client in clients:
+            client.sendMessage(self.address[0] + u' - connected')
+        clients.append(self)
+
+    def handleClose(self):
+        clients.remove(self)
+        print (self.address, 'closed')
+        for client in clients:
+            client.sendMessage(self.address[0] + u' - disconnected')
+
+class Server(SimpleWebSocketServer):
+
+    def __init__(self, queue, host, port, websocketclass):
+        SimpleWebSocketServer.__init__(self, host, port, websocketclass)
+        self.queue = queue
+
+    def _constructWebSocket(self, sock, address):
+        connection = self.websocketclass(self, sock, address)
+        connection.queue = self.queue
+        return connection
+
+class ThreadServer(Thread):
+
+    def __init__(self, queue, host, port):
+        Thread.__init__(self)
+        self.queue = queue
+        self.host = host
+        self.port = port
+
+    def run(self):
+        self.server = Server(self.queue, self.host, self.port, Connection)
+        self.server.serveforever()
+
+    def get_all_connections(self):
+        return self.server.connections.values()
+
+class WebServer:
+    """
+    Creates a SimpleWebSocketServer on a new thread
+    """
+
+    def __init__(self):
+        self.server = None
+        self.server_thread = None
+
+    def start(self):
+        #self.server = SimpleSSLWebSocketServer('0.0.0.0', 9103, Connection,
+        #    '/ws/src/app_to_django/cert.pem', '/ws/src/app_to_django/key.pem', ssl.PROTOCOL_TLSv1)
+        self.server = SimpleWebSocketServer('0.0.0.0', 9103, Connection)
+        self.server_thread = Thread(target=self.server.serveforever)
+        self.server_thread.start()
+
+    def get_all_connections(self):
+        return self.server.connections.values()
 
 
 def show_description():
@@ -31,13 +114,61 @@ def show_epilog():
     return "never enough testing"
 
 
+def loginfo(msg):
+    logging.info(msg)
+
+def logwarn(msg):
+    logging.warning(msg)
+
+def logdebug(msg):
+    logging.debug(msg)
+
+def logerr(msg):
+    logging.error(msg)
+
+def test123():
+    t = smach.Sequence(outcomes=['succeeded', 'preempted', 'aborted'],
+                          input_keys=['blackboard'], output_keys=['blackboard'], connector_outcome='succeeded')
+    with t:
+        smach.Sequence.add('0', sp.get_station_from_django())
+        smach.Sequence.add('1', sp.preempted_timeout(3))
+        smach.Sequence.add('2', sp.dummy())
+        smach.Sequence.add('3', sp.post_to_django())
+    return t
+
 def main(config):
+    #smach.set_loggers(loginfo,logwarn,logdebug,logerr) # disable
     rospy.init_node("websocket", log_level=rospy.DEBUG, disable_signals=True)
-    top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted'])
+
+    #web_server = WebServer()
+    #web_server.start()
+    queue = Queue.Queue()
+
+    server = ThreadServer(queue, '', 9103)
+    server.setDaemon(True)
+    server.start()
+
+    top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted', 'timeout'])
     top.userdata.blackboard = sp.init_blackboard()
     with top:
-        smach.StateMachine.add('a', sp.preempted_timeout(config.duration), {'succeeded': 'a'})
+        smach.StateMachine.add('1', test123(), {'succeeded': 'consumer'})
+        smach.StateMachine.add('consumer', sp.consumer(), {'succeeded': 'consumer'})
 
+        #smach.StateMachine.add('2', sp.preempted_timeout(100), {'succeeded': '2'})
+
+
+        smach.StateMachine.add('start', sp.get_vehicle_site_from_django(), {'succeeded': 'ping'})
+        smach.StateMachine.add('ping', sp.ping_to_clients(server), {'succeeded': 'msg'})
+        smach.StateMachine.add('msg', sp.get_msg_until_10sec(server, queue),
+        {
+            'succeeded': 'check',    # 데이터가 잘 들어와도 ping으로
+            'timeout': 'check'       # 10초 초과시 ping으로
+        })
+        smach.StateMachine.add('check', sp.check_10hour(), 
+        {
+            'succeeded': 'ping',        # 10시간 초과 안되면 ping으로
+            'timeout': 'start'          # 10시간 초과하면 API 호출
+        })
 
     outcome = top.execute()
     rospy.signal_shutdown('done!')
@@ -57,7 +188,7 @@ if __name__=="__main__":
     parser.add_argument('-r', '--bitrate', type=int, default=3500, help='gst image size')
     parser.add_argument('-a', '--host', type=str, default='192.168.0.221', help='host address to send')
     parser.add_argument('-p', '--port', type=int, default=5000, help='port to send using gst')
-    parser.add_argument('-d', '--duration', type=int, default=30, help='rosbag quit time(second)')
+    parser.add_argument('-d', '--duration', type=int, default=3, help='rosbag quit time(second)')
 
     parsed_known_args, unknown_args = parser.parse_known_args(sys.argv[1:])
     if parsed_known_args.version:

@@ -19,8 +19,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get -y install \
     ros-melodic-smach-ros \
     ros-melodic-py-trees \
     ros-melodic-can-msgs \
-    ros-melodic-diagnostic-updater 
-
+    ros-melodic-diagnostic-updater \
+    python-pip \
+    python2.7 \
+    python2.7-dev \
+    && rm -rf /var/lib/apt/lists/*
+# python2.7.. ros1 is python2
 
 # install pm2
 RUN curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
@@ -38,10 +42,15 @@ RUN git clone -b master git://github.com/kennethreitz/requests.git && \
     python setup.py install && \
     rm -rf /requests
 
+RUN git clone -b master https://github.com/dpallot/simple-websocket-server.git \
+    && cd simple-websocket-server \
+    && python setup.py install \
+    && rm -rf simple-websocket-server
+
 # RUN apt-get update
 ADD . /ws/src/app_to_django/
 WORKDIR /ws                             
-RUN pip3 install -r ./src/app_to_django/requirements.txt
+RUN pip2 install -r ./src/app_to_django/requirements.txt
 RUN /bin/bash -c "source /ros_entrypoint.sh && catkin_make"
 # 아래는 실행 안됨 docker-compose에서 volume을 설정하니 host의 volume이 덮어씌여짐.
 CMD ["chmod",  "777", "/ws/src/app_to_django/src/websocket.py"]

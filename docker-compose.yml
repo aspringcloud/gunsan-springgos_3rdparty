@@ -34,6 +34,8 @@ services:
         chmod +x /ws/src/app_to_django/src/eta.py
         pm2-runtime /ws/src/app_to_django/pm2.json
     restart: always
+    ports:
+      - 9103:9103
     networks:
       rosnet:
         ipv4_address: 172.18.0.101

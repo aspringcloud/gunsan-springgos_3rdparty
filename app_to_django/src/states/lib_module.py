@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import, division, print_function
 
 """
@@ -16,11 +18,341 @@ import os
 import roslaunch
 import diagnostic_updater
 from diagnostic_msgs.msg import DiagnosticStatus
+import json
+import Queue
+#added 2020.06.15
+from requests.auth import HTTPBasicAuth
+import kafka
+from geopy.distance import great_circle
 
+'''
+{
+    when: timestamp
+    where: site pk
+    who: 호출한 앱의 이름
+    what: request, response, event, error
+    how: {
+        type: passenger
+        vehicle_id:
+        vehicle_mid:
+        current_passenger:
+        accumulated_passenger:
+    }
+    how: {
+        type: power
+        vehicle_id:
+        vehicle_mid:
+        value: on/off
+    }
+    how: {
+        type: parking
+        vehicle_id:
+        vehicle_mid:
+        value: true/false
+    }
+    how: {
+        type: drive
+        vehicle_id:
+        vehicle_mid:
+        value: auto/normal
+    }
+    how: {
+        type: door
+        vehicle_id:
+        vehicle_mid:
+        value: true/false
+    }
+    how: {
+        type: message
+        vehicle_id:
+        vehicle_mid:
+        value: message
+    }
+    what: request
+    how: {
+        type: dispatch
+        vehicle_id:
+        vehicle_mid:
+        ?
+    }
+}
+'''
 def init_blackboard():
     blackboard = py_trees.blackboard.Blackboard()
     blackboard.pid = None
+    blackboard.message = {
+        "version": 1,
+        "when": time.time(),
+        "where": 'sejong_datahub',
+        "who": 'android app',
+        "what": 'EVENT',  #REQ, RESP ,EVET, ERROR
+        "how": {
+            "type": 'PASSENGER', # 'POWER', 'DOOR'
+            "vehicle_id": 6,
+            "current_passenger": 1,
+            "accumulated_passenger": 17
+        }
+    }
     return blackboard
+
+
+class consumer(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+        self.broker = '175.203.98.23:9092'
+        self.topic =  'sgs-kiosk-vehicle' # sim-vehicle
+        self.group =  'sgs-nifi-consumer005'
+        self.consumer = kafka.KafkaConsumer(self.topic,
+                bootstrap_servers = [self.broker], group_id=self.group,
+                enable_auto_commit=True, consumer_timeout_ms=600000 # 10min
+                )
+
+
+    def execute(self, ud):
+        stations = None
+        with open('/ws/src/app_to_django/stations.json') as json_file:
+            stations = json.load(json_file)
+
+        for msg in self.consumer:
+            try:
+                if not len(msg) or not len(msg.value):
+                    continue
+                packet = json.loads(msg.value) # string to dictionary
+                lata = 0.0
+                lona = 0.0
+                latb = 0.0
+                lonb = 0.0
+                if 'message' in packet:
+                    if 'gnss_latitude' in packet['message']:
+                        rospy.logdebug('gnss_latitude %f', float(packet['message']['gnss_latitude']))
+                        latb = float(packet['message']['gnss_latitude'])
+                    if 'gnss_longitude' in packet['message']:
+                        rospy.logdebug('gnss_longitude %f', float(packet['message']['gnss_longitude']))
+                        lonb = float(packet['message']['gnss_longitude'])
+                    for station in stations:
+                        if station['site'] == 2:
+                            lata = float(station['lat'])
+                            lona = float(station['lon'])
+
+                            a = (lata, lona)
+                            b = (latb, lonb)
+                            rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
+
+                rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
+            except UnicodeError:
+                rospy.logerr("UnicodeError - OK")
+                return 'succeeded'
+
+        return 'succeeded'
+
+class get_vehicle_site_from_django(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+    def execute(self, ud):
+        try:
+            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            sites = requests.request(
+                method='get',
+                url='http://115.93.143.2:9103/api/sites',
+                auth = auth_ones,
+                verify= None,
+                headers={'Content-type': 'application/json'}
+            )
+            vehicles = requests.request(
+                method='get',
+                url='http://115.93.143.2:9103/api/vehicles',
+                auth = auth_ones,
+                verify= None,
+                headers={'Content-type': 'application/json'}
+            )
+            with open('/ws/src/app_to_django/vehicles.json', 'w') as json_file:
+                json.dump(vehicles.json(), json_file)
+            with open('/ws/src/app_to_django/sites.json', 'w') as json_file:
+                json.dump(sites.json(), json_file)
+        except:
+            return 'aborted'
+        return 'succeeded'
+
+
+class get_station_from_django(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+    def execute(self, ud):
+        try:
+            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            stations = requests.request(
+                method='get',
+                url='http://115.93.143.2:9103/api/stations',
+                auth = auth_ones,
+                verify= None,
+                headers={'Content-type': 'application/json'}
+            )
+            with open('/ws/src/app_to_django/stations.json', 'w') as json_file:
+                json.dump(stations.json(), json_file)
+        except:
+            return 'aborted'
+        return 'succeeded'
+
+class ping_to_clients(smach.State):
+    def __init__(self, server):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+        self.server = server
+
+    def execute(self, ud):
+        for client in self.server.get_all_connections():
+            data = {'sent_time': time.time(),
+                    'client': client.address,
+                    'kind': 'ping'}
+            client.sendMessage(json.dumps(data))
+            rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+        return 'succeeded'
+
+
+class post_to_django(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+    def execute(self, ud):
+        how = ud.blackboard.message['how']
+        data = {}
+        pk = None
+        if 'vehicle_id' in how:
+            pk = how['vehicle_id']
+        if 'current_passenger' in how:
+            data['passenger'] = how['current_passenger']
+        if 'parking' in how:
+            data['isparked'] = how['parking']
+        if 'drive' in how:
+            data['drive'] = how['drive']
+        if 'door' in how:
+            data['door'] = how['door']
+
+        auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+        r = requests.request(
+            method='patch',
+            url='http://115.93.143.2:9103/api/vehicles/{}/'.format(pk),
+            data = json.dumps(data),
+            auth = auth_ones,
+            verify= None,
+            headers={'Content-type': 'application/json'}
+        )
+        if not r is None:
+            if r.status_code != 200:
+                res = r.reason
+                rospy.logerr('patch/'+r.reason)
+            else:
+                rospy.loginfo(r.status_code)
+        rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+
+        return 'succeeded'
+
+class dummy(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+    def execute(self, ud):
+        start_time = time.time()
+
+        vehicles = None
+        sites = None
+        with open('/ws/src/app_to_django/vehicles.json') as json_file:
+            vehicles = json.load(json_file)
+        with open('/ws/src/app_to_django/sites.json') as json_file:
+            sites = json.load(json_file)
+        sites = sites['results']
+        for vehicle in vehicles:
+            if isinstance(ud.blackboard.message['how']['vehicle_id'], str):
+                ud.blackboard.message['how']['vehicle_id'] = int(ud.blackboard.message['how']['vehicle_id'])
+            if isinstance(vehicle['id'], str):
+                vehicle['id'] = int(vehicle['id'])
+
+            if vehicle['id'] == ud.blackboard.message['how']['vehicle_id']:
+                for site in sites:
+                    if isinstance(vehicle['site'], str):
+                        vehicle['site'] = int(vehicle['site'])
+
+                    if isinstance(site['id'], str):
+                        site['id'] = int(site['id'])
+
+                    if vehicle['site'] == site['id']:
+                        ud.blackboard.message['how'].update({'site': site['id']})
+                        ud.blackboard.message['how'].update({'vehicle_mid': vehicle['mid']})
+
+        t = ud.blackboard.message['who']
+        ud.blackboard.message['who'] = [t, 'springgos_sejong_2']
+        rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+
+        #client.sendMessage(json.dumps(data))
+        #rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+        #print(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+
+        return 'succeeded'
+
+class get_msg_until_10sec(smach.State):
+    def __init__(self, server, queue):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+        self.server = server
+        self.queue = queue
+        self.timeout = 5
+    def execute(self, ud):
+        start_time = time.time()
+        while True:
+            if time.time() - start_time > self.timeout:
+                return 'timeout'
+            try:
+                # With False, the queue does not block the program.
+                # It raises Queue.Empty if empty.
+                client, kind, message = self.queue.get(False)
+            except Queue.Empty:
+                kind = None
+
+            if kind is not None:
+                # parsing...
+
+                self.queue.task_done()
+                break
+            time.sleep(0.1)
+
+
+        #data = None
+        #with open('/ws/src/app_to_django/vehicles.json') as json_file:
+        #    data = json.load(json_file)
+        #    print(type(data))
+
+        #client.sendMessage(json.dumps(data))
+        #rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+        #print(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+
+        return 'succeeded'
+
+
+class check_10hour(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+        self.timeout = 36000
+        self.start_time = time.time()
+    def execute(self, ud):
+        if time.time() - self.start_time > self.timeout:
+            return 'timeout'
+        return 'succeeded'
 
 
 class KeyPress(smach.State):

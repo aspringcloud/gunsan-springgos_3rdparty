@@ -37,7 +37,13 @@ def main(config):
     top.userdata.blackboard = sp.init_blackboard()
     with top:
         smach.StateMachine.add('a', sp.preempted_timeout(config.duration), {'succeeded': 'a'})
-
+    '''
+        get_station_from_django()
+        get_gnss_from_kafak 확인 필수
+        extract gnss value, compare station position
+        calcuration km
+        post api .. 정의
+    '''
 
     outcome = top.execute()
     rospy.signal_shutdown('done!')

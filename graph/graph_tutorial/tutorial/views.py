@@ -17,8 +17,7 @@ import smach
 import py_trees
 # kafka
 import kafka
-logging.basicConfig(level=logging.INFO, format='%(asctime)s (%(threadName)-2s) %(message)s',
-                    )
+logging.basicConfig(level=logging.INFO, format='%(asctime)s (%(threadName)-2s) %(message)s',)
 
 #===================== smach =========================
 
@@ -74,7 +73,7 @@ class dummy(smach.State):
     def execute(self, ud):
         logging.info('dummy')
         token = get_token_from_code(self.full_path, self.expected_state)
-        logging.inof(token)
+        logging.info(token)
         return 'succeeded'
 
 def main(get_full_path, expected_state, token):
