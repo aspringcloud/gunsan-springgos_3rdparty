@@ -26,6 +26,25 @@ import kafka
 from geopy.distance import great_circle
 
 '''
+app_to_django    | [DEBUG] [1592372886.770086]: {
+app_to_django    |     "how": {
+app_to_django    |         "accumulated_passenger": 17,
+app_to_django    |         "current_passenger": 1,
+app_to_django    |         "site": 2,
+app_to_django    |         "type": "PASSENGER",
+app_to_django    |         "vehicle_id": 6,
+app_to_django    |         "vehicle_mid": "SCN999"
+app_to_django    |     },
+app_to_django    |     "version": 1,
+app_to_django    |     "what": "EVENT",
+app_to_django    |     "when": 1592372883.060738,
+app_to_django    |     "where": "sejong_datahub",
+app_to_django    |     "who": [
+app_to_django    |         "android app",
+app_to_django    |         "springgos_sejong_2"
+app_to_django    |     ]
+app_to_django    | }
+
 {
     when: timestamp
     where: site pk
@@ -80,6 +99,7 @@ from geopy.distance import great_circle
 def init_blackboard():
     blackboard = py_trees.blackboard.Blackboard()
     blackboard.pid = None
+    blackboard.client = None
     blackboard.message = {
         "version": 1,
         "when": time.time(),
@@ -121,11 +141,21 @@ class consumer(smach.State):
                 if not len(msg) or not len(msg.value):
                     continue
                 packet = json.loads(msg.value) # string to dictionary
+                if 'type' in packet:
+                    if packet['type'] != 'gnss':  # only get gnss pacet
+                        continue
+
                 lata = 0.0
                 lona = 0.0
                 latb = 0.0
                 lonb = 0.0
+
                 if 'message' in packet:
+                    #test
+                    #if 'vhcle_id' in packet['message']:
+                    #    if packet['message']['vhcle_id'] != 'SCN001':
+                    #        continue
+
                     if 'gnss_latitude' in packet['message']:
                         rospy.logdebug('gnss_latitude %f', float(packet['message']['gnss_latitude']))
                         latb = float(packet['message']['gnss_latitude'])
@@ -157,20 +187,25 @@ class get_vehicle_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            url = 'http://115.93.143.2:9103/api/sites'
             sites = requests.request(
                 method='get',
-                url='http://115.93.143.2:9103/api/sites',
+                url=url,
                 auth = auth_ones,
                 verify= None,
                 headers={'Content-type': 'application/json'}
             )
+            rospy.loginfo('{}, {}'.format(url, sites.status_code))
+            url = 'http://115.93.143.2:9103/api/vehicles'
             vehicles = requests.request(
                 method='get',
-                url='http://115.93.143.2:9103/api/vehicles',
+                url=url,
                 auth = auth_ones,
                 verify= None,
                 headers={'Content-type': 'application/json'}
             )
+            rospy.loginfo('{}, {}'.format(url, vehicles.status_code))
+
             with open('/ws/src/app_to_django/vehicles.json', 'w') as json_file:
                 json.dump(vehicles.json(), json_file)
             with open('/ws/src/app_to_django/sites.json', 'w') as json_file:
@@ -208,14 +243,23 @@ class ping_to_clients(smach.State):
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
         self.server = server
-
+        self.timeout = 10
+        self.start_time = time.time()
     def execute(self, ud):
-        for client in self.server.get_all_connections():
-            data = {'sent_time': time.time(),
-                    'client': client.address,
-                    'kind': 'ping'}
-            client.sendMessage(json.dumps(data))
-            rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+        if time.time() - self.start_time > self.timeout:
+            for client in self.server.get_all_connections():
+                data = {'version': 1,
+                        'when': time.time(),
+                        'where': 'sejong_datahub',
+                        'what': 'PING',
+                        'who': [ "springgos_sejong_2 app"],
+                        'how': {
+                            'ipaddr': client.address
+                        }
+                    }
+                client.sendMessage(json.dumps(data))
+                rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+            self.start_time = time.time()
         return 'succeeded'
 
 
@@ -240,9 +284,10 @@ class post_to_django(smach.State):
             data['door'] = how['door']
 
         auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+        url = 'http://115.93.143.2:9103/api/vehicles/{}/'.format(pk)
         r = requests.request(
             method='patch',
-            url='http://115.93.143.2:9103/api/vehicles/{}/'.format(pk),
+            url=url,
             data = json.dumps(data),
             auth = auth_ones,
             verify= None,
@@ -253,7 +298,7 @@ class post_to_django(smach.State):
                 res = r.reason
                 rospy.logerr('patch/'+r.reason)
             else:
-                rospy.loginfo(r.status_code)
+                rospy.loginfo('{}, {}'.format(url, r.status_code))
         rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
         return 'succeeded'
@@ -294,21 +339,16 @@ class dummy(smach.State):
         t = ud.blackboard.message['who']
         ud.blackboard.message['who'] = [t, 'springgos_sejong_2']
         rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
-
-        #client.sendMessage(json.dumps(data))
-        #rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
-        #print(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
-
         return 'succeeded'
 
-class get_msg_until_10sec(smach.State):
-    def __init__(self, server, queue):
+class get_msg_until_sec(smach.State):
+    def __init__(self, server, queue, timeout):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
         self.server = server
         self.queue = queue
-        self.timeout = 5
+        self.timeout = timeout
     def execute(self, ud):
         start_time = time.time()
         while True:
@@ -317,27 +357,76 @@ class get_msg_until_10sec(smach.State):
             try:
                 # With False, the queue does not block the program.
                 # It raises Queue.Empty if empty.
-                client, kind, message = self.queue.get(False)
+                ud.blackboard.client, kind, ud.blackboard.message = self.queue.get(False)
+                ud.blackboard.message = eval(ud.blackboard.message) # unicode to dictionary
+                #rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
             except Queue.Empty:
                 kind = None
 
             if kind is not None:
                 # parsing...
-
+                '''{
+                "how": {
+                    "accumulated_passenger": 17,
+                    "current_passenger": 1,
+                    "site": 2,
+                    "type": "PASSENGER",
+                    "vehicle_id": 6,
+                    "vehicle_mid": "SCN999"
+                    },
+                "version": 1,
+                "what": "EVENT",
+                "when": 1592372883.060738,
+                "where": "sejong_datahub",
+                "who": ["android app", "springgos_sejong_2"]
+                }'''
                 self.queue.task_done()
                 break
             time.sleep(0.1)
 
+        vehicles = None
+        sites = None
+        with open('/ws/src/app_to_django/vehicles.json') as json_file:
+            vehicles = json.load(json_file)
+        with open('/ws/src/app_to_django/sites.json') as json_file:
+            sites = json.load(json_file)
+        sites = sites['results']
 
-        #data = None
-        #with open('/ws/src/app_to_django/vehicles.json') as json_file:
-        #    data = json.load(json_file)
-        #    print(type(data))
+        is_validated = False
+        for vehicle in vehicles:
+            if 'how' in ud.blackboard.message:
+                if 'vehicle_id' in ud.blackboard.message['how']:
+                    if isinstance(ud.blackboard.message['how']['vehicle_id'], str):
+                        ud.blackboard.message['how']['vehicle_id'] = int(ud.blackboard.message['how']['vehicle_id'])
+                    if isinstance(vehicle['id'], str):
+                        vehicle['id'] = int(vehicle['id'])
+                    if vehicle['id'] == ud.blackboard.message['how']['vehicle_id']:
+                        for site in sites:
+                            if isinstance(vehicle['site'], str):
+                                vehicle['site'] = int(vehicle['site'])
 
-        #client.sendMessage(json.dumps(data))
-        #rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
-        #print(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                            if isinstance(site['id'], str):
+                                site['id'] = int(site['id'])
 
+                            if vehicle['site'] == site['id']:
+                                ud.blackboard.message['how'].update({'site': site['id']})
+                                ud.blackboard.message['how'].update({'vehicle_mid': vehicle['mid']})
+                                break
+                        t = ud.blackboard.message['who']
+                        ud.blackboard.message['who'] = [t, 'springgos_sejong_2']
+                        #rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                        is_validated = True
+                        break
+        if is_validated:
+            for client in self.server.get_all_connections():
+                if ud.blackboard.client == client:
+                    data = ud.blackboard.message
+                    data['what'] = 'RESP'
+                    client.sendMessage(json.dumps(data))
+                    rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+                else:
+                    client.sendMessage(json.dumps(ud.blackboard.message))
+                    rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
         return 'succeeded'
 
 

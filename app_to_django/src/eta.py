@@ -18,6 +18,14 @@ from smach import CBState
 import states as sp
 
 
+'''
+app_to_django    | [DEBUG] [1592373107.677877]: gnss_latitude 35.836179
+app_to_django    | [DEBUG] [1592373107.679026]: gnss_longitude 128.681446
+app_to_django    | [INFO] [1592373107.680245]: site 2, station STA001, 17.038929m
+app_to_django    | [INFO] [1592373107.688052]: site 2, station STA002, 643.894195m
+app_to_django    | [INFO] [1592373107.689314]: site 2, station STA003, 781.124017m
+app_to_django    | [INFO] [1592373107.690575]: site 2, station STA004, 490.352185m
+'''
 def show_description():
     return "Test ROS node"
 

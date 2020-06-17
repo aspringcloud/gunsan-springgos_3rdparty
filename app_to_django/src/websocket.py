@@ -151,19 +151,23 @@ def main(config):
     top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted', 'timeout'])
     top.userdata.blackboard = sp.init_blackboard()
     with top:
-        smach.StateMachine.add('1', test123(), {'succeeded': 'consumer'})
-        smach.StateMachine.add('consumer', sp.consumer(), {'succeeded': 'consumer'})
+        #smach.StateMachine.add('1', test123(), {'succeeded': 'consumer'})
+        #smach.StateMachine.add('consumer', sp.consumer(), {'succeeded': 'consumer'})
 
         #smach.StateMachine.add('2', sp.preempted_timeout(100), {'succeeded': '2'})
 
-
+        # 시작시 DB에서 vehicle, site 가져오고
         smach.StateMachine.add('start', sp.get_vehicle_site_from_django(), {'succeeded': 'ping'})
+        # 클라 핑주고 
         smach.StateMachine.add('ping', sp.ping_to_clients(server), {'succeeded': 'msg'})
-        smach.StateMachine.add('msg', sp.get_msg_until_10sec(server, queue),
+        # 10초 안에 웹소켓으로 데이터 들어 오면 vehicle, site정보 이용해서 보낸 클라제외하고 모든 클라한테 보낼 메시지 만들어 모두 전소
+        smach.StateMachine.add('msg', sp.get_msg_until_sec(server, queue, 20),
         {
-            'succeeded': 'check',    # 데이터가 잘 들어와도 ping으로
+            'succeeded': 'post',    # 데이터가 들어오면 post로
             'timeout': 'check'       # 10초 초과시 ping으로
         })
+        smach.StateMachine.add('post', sp.post_to_django(), {'succeeded': 'check'})
+        # 무조건 거치고, 10시간 되면 vehicle, site DB에서 가져오고
         smach.StateMachine.add('check', sp.check_10hour(), 
         {
             'succeeded': 'ping',        # 10시간 초과 안되면 ping으로
