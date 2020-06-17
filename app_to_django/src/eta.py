@@ -41,10 +41,27 @@ def show_epilog():
 
 def main(config):
     rospy.init_node("eta", log_level=rospy.DEBUG, disable_signals=True)
-    top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted'])
+    top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted', 'timeout'])
     top.userdata.blackboard = sp.init_blackboard()
     with top:
-        smach.StateMachine.add('a', sp.preempted_timeout(config.duration), {'succeeded': 'a'})
+        #smach.StateMachine.add('start', sp.post_eta_to_django(), {'succeeded': 'timeout'})
+        #smach.StateMachine.add('timeout', sp.preempted_timeout(100), {'succeeded': 'timeout'})
+
+        smach.StateMachine.add('start', sp.get_station_from_django(), {'succeeded': 'make'})
+        smach.StateMachine.add('make', sp.make_eta_from_kafka_until_10min(),
+        {
+            'succeeded': 'post',    #
+            'timeout': 'check'      # 10min 초과하면 check_10houre로
+        })
+        smach.StateMachine.add('post', sp.post_eta_to_django_by_1sec(), {'succeeded': 'check'})
+        smach.StateMachine.add('check', sp.check_10hour(), 
+        {
+            'succeeded': 'make',        # 10시간 초과 안되면 make_from_kafka로
+            'timeout': 'start'          # 10시간 초과하면 get_station
+        })
+
+
+
     '''
         get_station_from_django()
         get_gnss_from_kafak 확인 필수

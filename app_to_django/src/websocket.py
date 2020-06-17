@@ -38,22 +38,22 @@ class Connection(WebSocket):
 
     def handleMessage(self):
         self.queue.put([self, "text", self.data])
-        for client in clients:
-            if client != self:
-                client.sendMessage(self.address[0] + u' - ' + self.data)
+        #for client in clients:
+        #    if client != self:
+        #        client.sendMessage(self.address[0] + u' - ' + self.data)
 
 
     def handleConnected(self):
         print (self.address, 'connected')
-        for client in clients:
-            client.sendMessage(self.address[0] + u' - connected')
+        #for client in clients:
+        #    client.sendMessage(self.address[0] + u' - connected')
         clients.append(self)
 
     def handleClose(self):
         clients.remove(self)
         print (self.address, 'closed')
-        for client in clients:
-            client.sendMessage(self.address[0] + u' - disconnected')
+        #for client in clients:
+        #    client.sendMessage(self.address[0] + u' - disconnected')
 
 class Server(SimpleWebSocketServer):
 
@@ -166,7 +166,7 @@ def main(config):
             'succeeded': 'post',    # 데이터가 들어오면 post로
             'timeout': 'check'       # 10초 초과시 ping으로
         })
-        smach.StateMachine.add('post', sp.post_to_django(), {'succeeded': 'check'})
+        smach.StateMachine.add('post', sp.post_event_to_django(), {'succeeded': 'check'})
         # 무조건 거치고, 10시간 되면 vehicle, site DB에서 가져오고
         smach.StateMachine.add('check', sp.check_10hour(), 
         {

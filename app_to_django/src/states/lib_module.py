@@ -116,9 +116,9 @@ def init_blackboard():
     return blackboard
 
 
-class consumer(smach.State):
+class make_eta_from_kafka_until_10min(smach.State):
     def __init__(self):
-        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
 
@@ -129,7 +129,6 @@ class consumer(smach.State):
                 bootstrap_servers = [self.broker], group_id=self.group,
                 enable_auto_commit=True, consumer_timeout_ms=600000 # 10min
                 )
-
 
     def execute(self, ud):
         stations = None
@@ -169,14 +168,15 @@ class consumer(smach.State):
 
                             a = (lata, lona)
                             b = (latb, lonb)
-                            rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
+                            #rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
 
-                rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
+                #rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
+                return 'succeeded'
             except UnicodeError:
                 rospy.logerr("UnicodeError - OK")
                 return 'succeeded'
 
-        return 'succeeded'
+        return 'timeout'
 
 class get_vehicle_site_from_django(smach.State):
     def __init__(self):
@@ -224,13 +224,15 @@ class get_station_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            url = 'http://115.93.143.2:9103/api/stations'
             stations = requests.request(
                 method='get',
-                url='http://115.93.143.2:9103/api/stations',
+                url=url,
                 auth = auth_ones,
                 verify= None,
                 headers={'Content-type': 'application/json'}
             )
+            rospy.loginfo('{}, {}'.format(url, stations.status_code))
             with open('/ws/src/app_to_django/stations.json', 'w') as json_file:
                 json.dump(stations.json(), json_file)
         except:
@@ -263,7 +265,7 @@ class ping_to_clients(smach.State):
         return 'succeeded'
 
 
-class post_to_django(smach.State):
+class post_event_to_django(smach.State):
     def __init__(self):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
                              input_keys=['blackboard'],
@@ -302,6 +304,74 @@ class post_to_django(smach.State):
         rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
         return 'succeeded'
+
+
+class post_eta_to_django_by_1sec(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+        self.timeout = 2
+        self.start_time = time.time()
+    def execute(self, ud):
+        if time.time() - self.start_time > self.timeout:
+            pk = 1
+            data = {}
+            station_01 = {
+                'id': 1,
+                'mid': 'STA001',
+                'eta': 13, # minute
+                'distance': 130, # meter
+                'passed_station': False
+            }
+            station_02 = {
+                'id': 2,
+                'mid': 'STA002',
+                'eta': 23, # minute
+                'distance': 230, # meter
+                'passed_station': False
+            }
+            station_03 = {
+                'id': 3,
+                'mid': 'STA003',
+                'eta': 33, # minute
+                'distance': 330, # meter
+                'passed_station': False
+            }
+            station_04 = {
+                'id': 4,
+                'mid': 'STA004',
+                'eta': 43, # minute
+                'distance': 140, # meter
+                'passed_station': True
+            }
+            data['eta'] = []
+            data['eta'].append(json.dumps(station_01))
+            data['eta'].append(json.dumps(station_02))
+            data['eta'].append(json.dumps(station_03))
+            data['eta'].append(json.dumps(station_04))
+
+
+            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            url = 'http://115.93.143.2:9104/api/vehicles/{}/'.format(pk)
+            r = requests.request(
+                method='patch',
+                url=url,
+                data = json.dumps(data),
+                auth = auth_ones,
+                verify= None,
+                headers={'Content-type': 'application/json'}
+            )
+            if not r is None:
+                if r.status_code != 200:
+                    res = r.reason
+                    rospy.logerr('patch/'+r.reason)
+                else:
+                    rospy.loginfo('{}, {}'.format(url, r.status_code))
+            rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+            self.start_time = time.time()
+        return 'succeeded'
+
 
 class dummy(smach.State):
     def __init__(self):
@@ -360,8 +430,20 @@ class get_msg_until_sec(smach.State):
                 ud.blackboard.client, kind, ud.blackboard.message = self.queue.get(False)
                 ud.blackboard.message = eval(ud.blackboard.message) # unicode to dictionary
                 #rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+
+
             except Queue.Empty:
                 kind = None
+            except KeyError:
+                kind = None
+                rospy.logerr('KeyError')
+            except SyntaxError:
+                kind = None
+                rospy.logerr('SyntaxError')
+            except NameError:
+                kind = None
+                rospy.logerr('NameError')
+
 
             if kind is not None:
                 # parsing...
@@ -427,7 +509,9 @@ class get_msg_until_sec(smach.State):
                 else:
                     client.sendMessage(json.dumps(ud.blackboard.message))
                     rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
-        return 'succeeded'
+            return 'succeeded'
+
+        return 'timeout'
 
 
 class check_10hour(smach.State):
@@ -440,6 +524,7 @@ class check_10hour(smach.State):
         self.start_time = time.time()
     def execute(self, ud):
         if time.time() - self.start_time > self.timeout:
+            self.start_time = time.time()
             return 'timeout'
         return 'succeeded'
 
