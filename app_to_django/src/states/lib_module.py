@@ -25,6 +25,10 @@ from requests.auth import HTTPBasicAuth
 import kafka
 from geopy.distance import great_circle
 
+import requests
+from datetime import datetime
+weather_api_keys = '478828da0e79a958cc52abb2d47fad95'
+
 '''
 app_to_django    | [DEBUG] [1592372886.770086]: {
 app_to_django    |     "how": {
@@ -353,13 +357,13 @@ class post_eta_to_django_by_1sec(smach.State):
 
 
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'http://115.93.143.2:9104/api/vehicles/{}/'.format(pk)
+            url = 'https://115.93.143.2:9104/api/vehicles/{}/'.format(pk)
             r = requests.request(
                 method='patch',
                 url=url,
                 data = json.dumps(data),
                 auth = auth_ones,
-                verify= None,
+                verify= False,
                 headers={'Content-type': 'application/json'}
             )
             if not r is None:
@@ -790,3 +794,136 @@ def trigger(ud):
         print("Service did not process request: " + str(exc))
 
     return 'succeeded'
+
+
+class get_weather_from_opensite(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+    def execute(self, ud):
+        try:
+            garages = None
+            with open('/ws/src/app_to_django/garages.json') as json_file:
+                garages = json.load(json_file)
+            garages = garages['results']
+
+            for garage in garages:
+                lat = float(garage['lat'])
+                lon = float(garage['lon'])
+                print(lat,lon)
+                current, houly = self.daily_weather(lat,lon)
+                rospy.loginfo('{},{}'.format(current,houly))
+
+        except TypeError:
+            rospy.logerr('TypeError')
+        except KeyError:
+            rospy.logerr('KeyError')
+        except SyntaxError:
+            rospy.logerr('SyntaxError')
+        except NameError:
+            rospy.logerr('NameError')
+
+        return 'succeeded'
+
+    def categorization_WeatherState(self, pngname):
+        #해당 정보는 아래의 링크를 따른다.
+        #https://openweathermap.org/weather-conditions
+        if pngname[:2] in ('01', '02'):
+            return 'good'
+        elif pngname[:2] in ('03', '04', '50'):
+            return 'cloudy'
+        elif pngname[:2] in ('09', '10', '11'):
+            return 'rainy'
+        else:
+            return 'snow'
+
+    def daily_weather(self, lat, lon):
+        apiAddr = 'https://api.openweathermap.org/data/2.5/onecall'
+        params = {'lat':lat, 'lon':lon, 'lang':'kr', 'units':'metric', 'appid':weather_api_keys, "exclude":'daily'}
+        res = requests.get(apiAddr, params=params)
+        WeatherData = res.json()
+
+        """
+        lat 위치의 지리적 좌표 (위도)
+        lon 위치의 지리적 좌표 (경도)
+        timezone 요청한 위치의 시간대 이름
+        timezone_offset UTC에서 초 단위로 이동
+
+        current : 데이터 포인트 dt는 현재 시간이 아닌 요청 된 시간을 나타냅니다.
+            current.dt 요청 된 시간, 유닉스, UTC
+            current.sunrise 일출 시간, 유닉스, UTC
+            current.sunset 일몰 시간, 유닉스, UTC
+            current.temp온도. 단위 기본값 : 켈빈, 미터법 : 섭씨, 임페리얼 : 화씨. 단위 형식을 변경하는 방법
+            current.feels_like온도. 이 온도 매개 변수는 날씨에 대한 인간의 인식을 설명합니다. 단위 기본값 : 켈빈, 미터법 : 섭씨, 임페리얼 : 화씨.
+            current.pressure 해수면의 대기압, hPa
+            current.humidity 습도, %
+            current.dew_point물방울이 응축되기 시작하는 대기 온도 (압력 및 습도에 따라 변함)는 이슬이 형성 될 수 있습니다. 단위 기본값 : 켈빈, 미터법 : 섭씨, 임페리얼 : 화씨.
+            current.clouds 흐림, %
+            current.uvi 정오 UV 인덱스
+            current.visibility 평균 가시성, 미터
+            current.wind_speed바람 속도. 단위 기본값 : 미터 / 초, 미터법 : 미터 / 초, 임페리얼 : 마일 / 시간. 단위 형식을 변경하는 방법
+            current.wind_gust바람 돌풍. 단위 기본값 : 미터 / 초, 미터법 : 미터 / 초, 임페리얼 : 마일 / 시간. 단위 형식을 변경하는 방법
+            current.wind_deg 풍향,도 (기상)
+            current.rain 강수량, mm
+            current.snow 제 설량, mm
+            current.weather (자세한 정보 기상 조건 코드)
+            current.weather.id 기상 조건 ID
+                current.weather.main 날씨 매개 변수 그룹 (비, 눈, 극한 등)
+                current.weather.description그룹 내 날씨 조건 ( 날씨 조건 전체 목록 ) 당신의 언어로 결과를 얻으십시오
+                current.weather.icon날씨 아이콘 ID 아이콘을 얻는 방법"""
+
+        nowHour = datetime.now().strftime('%H')
+        needTime = [9,18,21,00]
+        HoulyData = {}
+        for HoulyIndex in WeatherData['hourly']:
+            s = HoulyIndex['dt']
+            time = int( datetime.utcfromtimestamp(s).strftime('%H') )
+            now = int( datetime.now().strftime('%H'))
+            if int(time) in needTime:
+                HoulyData.setdefault(int( datetime.utcfromtimestamp(s).strftime('%H') ),  )
+                #날씨 구분
+                HoulyData[time] = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState( HoulyIndex['weather'][0]['icon'] ) }
+            if now == time:
+                print(HoulyIndex['weather'][0]['icon'])
+                CurrentWeatherData = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState( HoulyIndex['weather'][0]['icon'] ) }
+
+        return CurrentWeatherData, HoulyData
+
+
+
+class post_weather_to_django(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+    def execute(self, ud):
+        return 'succeeded'
+
+
+
+class get_site_from_django(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+    def execute(self, ud):
+        try:
+            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            url = 'http://115.93.143.2:9103/api/garages'
+            garages = requests.request(
+                method='get',
+                url=url,
+                auth = auth_ones,
+                verify= None,
+                headers={'Content-type': 'application/json'}
+            )
+            rospy.loginfo('{}, {}'.format(url, garages.status_code))
+            with open('/ws/src/app_to_django/garages.json', 'w') as json_file:
+                json.dump(garages.json(), json_file)
+        except:
+            return 'aborted'
+
+        return 'succeeded'
