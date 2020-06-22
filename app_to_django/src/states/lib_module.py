@@ -495,7 +495,7 @@ class get_msg_until_sec(smach.State):
                                 site['id'] = int(site['id'])
 
                             if vehicle['site'] == site['id']:
-                                ud.blackboard.message['how'].update({'site': site['id']})
+                                ud.blackboard.message['how'].update({'site_id': site['id']})
                                 ud.blackboard.message['how'].update({'vehicle_mid': vehicle['mid']})
                                 break
                         t = ud.blackboard.message['who']
@@ -875,7 +875,7 @@ class get_weather_from_opensite(smach.State):
                 current.weather.icon날씨 아이콘 ID 아이콘을 얻는 방법"""
 
         nowHour = datetime.now().strftime('%H')
-        needTime = [9,18,21,00]
+        needTime = [9,12,15,18]
         HoulyData = {}
         for HoulyIndex in WeatherData['hourly']:
             s = HoulyIndex['dt']

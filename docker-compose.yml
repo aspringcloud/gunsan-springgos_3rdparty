@@ -32,6 +32,7 @@ services:
       - | 
         chmod +x /ws/src/app_to_django/src/websocket.py
         chmod +x /ws/src/app_to_django/src/eta.py
+        chmod +x /ws/src/app_to_django/src/weather.py
         pm2-runtime /ws/src/app_to_django/pm2.json
     restart: always
     ports:
