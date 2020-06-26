@@ -33,6 +33,10 @@
                 <a class="nav-link{% if request.resolver_match.view_name == 'calendar' %} active{% endif %}" href="{% url 'calendar' %}">Calendar</a>
               </li>
             {% endif %}
+
+            <li class="nav-item" data-turbolinks="false">
+              <a class="nav-link{% if request.resolver_match.view_name == 'email' %} active{% endif %}" href="{% url 'email' %}">Email</a>
+            </li>
           </ul>
           <ul class="navbar-nav justify-content-end">
             <li class="nav-item">

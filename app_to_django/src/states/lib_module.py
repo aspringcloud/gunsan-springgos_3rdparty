@@ -27,7 +27,16 @@ from geopy.distance import great_circle
 
 import requests
 from datetime import datetime
-weather_api_keys = '478828da0e79a958cc52abb2d47fad95'
+
+#added 2020.6.27 for dust api
+import xmltodict
+
+#InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
+#Adding certificate verification is strongly advised.
+#See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 '''
 app_to_django    | [DEBUG] [1592372886.770086]: {
@@ -117,6 +126,9 @@ def init_blackboard():
             "accumulated_passenger": 17
         }
     }
+    blackboard.weather = {}
+    blackboard.forecast = {}
+    blackboard.dust = {}
     return blackboard
 
 
@@ -796,11 +808,12 @@ def trigger(ud):
     return 'succeeded'
 
 
-class get_weather_from_opensite(smach.State):
+class get_weather_from_opensite_and_post(smach.State):
     def __init__(self):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
+        self.weather_api_keys = '478828da0e79a958cc52abb2d47fad95'
 
     def execute(self, ud):
         try:
@@ -808,13 +821,36 @@ class get_weather_from_opensite(smach.State):
             with open('/ws/src/app_to_django/garages.json') as json_file:
                 garages = json.load(json_file)
             garages = garages['results']
-
+            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
             for garage in garages:
                 lat = float(garage['lat'])
                 lon = float(garage['lon'])
-                print(lat,lon)
+
                 current, houly = self.daily_weather(lat,lon)
-                rospy.loginfo('{},{}'.format(current,houly))
+                #rospy.loginfo('{},{}'.format(current,houly))
+
+                data = {}
+                data['current_weather'] = json.dumps(current)
+                data['weather_forecast'] = json.dumps(houly)
+
+                pk = garage['site']
+                url = 'https://115.93.143.2:9104/api/sites/{}/'.format(pk)
+                #print(url)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data = json.dumps(data),
+                    auth = auth_ones,
+                    verify= False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if not r is None:
+                    if r.status_code != 200:
+                        res = r.reason
+                        rospy.logerr('patch/'+r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+                rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
         except TypeError:
             rospy.logerr('TypeError')
@@ -841,7 +877,7 @@ class get_weather_from_opensite(smach.State):
 
     def daily_weather(self, lat, lon):
         apiAddr = 'https://api.openweathermap.org/data/2.5/onecall'
-        params = {'lat':lat, 'lon':lon, 'lang':'kr', 'units':'metric', 'appid':weather_api_keys, "exclude":'daily'}
+        params = {'lat':lat, 'lon':lon, 'lang':'kr', 'units':'metric', 'appid':self.weather_api_keys, "exclude":'daily'}
         res = requests.get(apiAddr, params=params)
         WeatherData = res.json()
 
@@ -886,7 +922,7 @@ class get_weather_from_opensite(smach.State):
                 #날씨 구분
                 HoulyData[time] = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState( HoulyIndex['weather'][0]['icon'] ) }
             if now == time:
-                print(HoulyIndex['weather'][0]['icon'])
+                #print(HoulyIndex['weather'][0]['icon'])
                 CurrentWeatherData = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState( HoulyIndex['weather'][0]['icon'] ) }
 
         return CurrentWeatherData, HoulyData
@@ -927,3 +963,204 @@ class get_site_from_django(smach.State):
             return 'aborted'
 
         return 'succeeded'
+
+
+class get_dust_from_opensite_and_post(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+        self.dust_api_keys = 'zHKzBSmpIIz6sd3aUeDAW5Ee7BoMdjVN%2FF9yTZFDyHeYzL6sKz44TA3sypR0Sg%2BPbqtGX5lRNE0Yj3MvI6aJ0w%3D%3D'
+        #카카오 Developers key [ 1일 1만건 가능]
+        #관련 API 링크
+        # https://developers.kakao.com/docs/latest/ko/local/dev-guide
+        self.KaKaoRestAPIKey = 'ea2dfc54f13d1eeaeca07fd6fcf11c53'
+        self.Host = 'https://dapi.kakao.com'
+        self.APIAddr ='/v2/local/geo/coord2address.json?input_coord=WGS84'
+
+    def execute(self, ud):
+        try:
+            garages = None
+            with open('/ws/src/app_to_django/garages.json') as json_file:
+                garages = json.load(json_file)
+            garages = garages['results']
+            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+            for garage in garages:
+                lat = float(garage['lat'])
+                lon = float(garage['lon'])
+                ret = self.DustNOzoneInfo(lon,lat)
+                if ret is False:
+                    rospy.logerr('get error from DustNOzoneInfo')
+                    continue
+
+                #current, houly = self.daily_weather(lat,lon)
+                #rospy.loginfo('{},{}'.format(current,houly))
+                #print(type(ret))
+                data = {}
+                data['air_quality'] = json.dumps(ret)
+
+                pk = garage['site']
+                url = 'https://115.93.143.2:9104/api/sites/{}/'.format(pk)
+                #print(url)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data = json.dumps(data),
+                    auth = auth_ones,
+                    verify= False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if not r is None:
+                    if r.status_code != 200:
+                        res = r.reason
+                        rospy.logerr('patch/'+r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+                rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+
+        except TypeError:
+            rospy.logerr('TypeError')
+        except KeyError:
+            rospy.logerr('KeyError')
+        except SyntaxError:
+            rospy.logerr('SyntaxError')
+        except NameError:
+            rospy.logerr('NameError')
+
+        return 'succeeded'
+
+    def coord2addres(self, lon, lat):
+        # lon = x
+        # lat = y
+        header = {"Authorization": str("KakaoAK " + self.KaKaoRestAPIKey)}
+        url = self.Host + self.APIAddr+"&x="+str(lon)+"&y="+str(lat)
+        res = requests.get(url, headers=header)
+        if res.status_code == 200:
+            addr = res.json()
+            rospy.logdebug(json.dumps(addr, indent=4, sort_keys=True))
+            region1 = addr['documents'][0]['address']['region_1depth_name']
+            region2 = addr['documents'][0]['address']['region_2depth_name']
+            region3 = addr['documents'][0]['address']['region_3depth_name']
+            print(region1.encode('utf-8'), region2.encode('utf-8'), region3.encode('utf-8'))
+
+            if len(region1) == 3:
+                region1 = region1[:-1]
+            elif len(region1) > 3:
+                region1 = region1[:2]
+
+        return region1, region2
+
+    def DetectNearCites(self, sido, stationName):
+        #현재 주소를 TM 체계의 좌표로 바꾸기 위한 API 주소
+        GetTMPositon_API = 'http://openapi.airkorea.or.kr/openapi/services/rest/MsrstnInfoInqireSvc/getTMStdrCrdnt'
+        # TM 체계의 주소로 가까운 측정소의 위치를 찾기 위한 API 주소
+        GetNearDetector_API = 'http://openapi.airkorea.or.kr/openapi/services/rest/MsrstnInfoInqireSvc/getNearbyMsrstnList'
+
+        # 1. 좌표를 얻은 "동"이름으로 TM 좌표를 얻음.
+        GetTMURL = GetTMPositon_API+"?ServiceKey="+self.dust_api_keys+"&umdName="+stationName
+        GetTMres = requests.get(GetTMURL)
+        if GetTMres.status_code == 200:
+            print(GetTMres.text.encode('utf-8'))
+            TMDataList = self.xml2Dict(GetTMres.text)['response']['body']['items']['item']
+        else:
+            return False
+
+        tmX = tmY = None
+        #해당 동이 포함된 리스트를 탐색
+        #print(type(TMDataList))
+        newobj = []
+        if isinstance(TMDataList, dict):
+            newobj.append(TMDataList)
+        else:
+            newobj = TMDataList
+
+        found = False
+        for sidoindex in newobj:
+            if sidoindex['sidoName'][:2] == sido:
+                found = True
+                tmX = sidoindex['tmX']
+                tmY = sidoindex['tmY']
+                break
+        if not found:
+            rospy.logerr('not found sidoName')
+
+        # 2. 이렇게 얻은 tmX,tmY 좌표를 이용하여, 가까운 측정소 탐색
+        GetStationURL = GetNearDetector_API + "?ServiceKey="+self.dust_api_keys+"&tmX="+tmX+"&tmY="+tmY
+        GetStationres = requests.get( GetStationURL )
+
+        StationList = []
+        if GetStationres.status_code == 200:
+            NearStationsList = self.xml2Dict(GetStationres.text)['response']['body']['items']['item']
+
+            for StationIndex in NearStationsList:
+                StationList.append(StationIndex['stationName'])
+            return StationList
+
+        return False
+
+    def Data2Dict(self, xmlDict):
+        resultDict = {}
+        infoList = xmlDict['response']['body']['items']['item']
+
+        for stationIndex in infoList:
+            resultDict.setdefault(stationIndex['stationName'], {})
+
+            resultDict[stationIndex['stationName']].setdefault('o3Grade', stationIndex['o3Grade'])
+            resultDict[stationIndex['stationName']].setdefault('pm10Grade', stationIndex['pm10Grade1h'])
+            resultDict[stationIndex['stationName']].setdefault('pm25Grade', stationIndex['pm25Grade1h'])
+            resultDict[stationIndex['stationName']].setdefault('no2Grade', stationIndex['no2Grade'])
+
+        return resultDict
+
+    def DustNOzoneInfo(self, lon, lat):
+        #미세먼지 탐색을 위한, API 경로
+        dustApiAddr = 'http://openapi.airkorea.or.kr/openapi/services/rest/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty'
+
+        #params 옵션을 이용한 인자 전달 시, 서비스 키가 지속적으로 변경되는 문제가 발생. 따라서 메뉴얼적인 문자 조합으로 조회 수행
+        #params = {'serviceKey': self.dust_api_keys, 'numOfRows':10, 'pageNo':1, 'sidoName':sido, 'ver':1.3}
+
+        sido, stationName = self.coord2addres(lon, lat)
+        print(sido.encode('utf-8'),stationName.encode('utf-8'))
+        targetStation = self.DetectNearCites(sido, stationName)
+        #print( sido, stationName )
+        #주소를 찾지 못할 경우
+        #if sido == False:
+        #    return False
+
+        url = dustApiAddr +"?serviceKey="+self.dust_api_keys+"&sidoName="+sido+"&ver="+str(1.3)
+        res = requests.get(url)
+
+        """
+        grade값을 4점으로 구성되며, 표는 아래와 같다.
+        ______________________________________
+        | 등 급 | 좋 음 | 보 통 | 나 쁨 | 매우 나쁨 |
+        ______________________________________
+        |garade|  1   |  2  |   3  |    4    |
+        ______________________________________
+        """
+
+        if res.status_code == 200:
+            station_info = self.xml2Dict(res.text)
+            Dict_StationInfo = self.Data2Dict(station_info)
+
+            for key in Dict_StationInfo.keys():
+                print(key.encode('utf-8'))
+
+            print('-----------------------')
+
+            for targetStationIndex in targetStation:
+                print(targetStationIndex.encode('utf-8'))
+                if targetStationIndex in Dict_StationInfo.keys():
+                    return Dict_StationInfo[targetStationIndex]
+            # if not found
+            for key in Dict_StationInfo.keys():
+                return Dict_StationInfo[key]
+
+        return False
+
+    def xml2Dict(self, xml):
+        list2xml = xmltodict.parse(xml)
+        list2json = json.dumps(list2xml)
+        result = json.loads(list2json)
+
+        return result

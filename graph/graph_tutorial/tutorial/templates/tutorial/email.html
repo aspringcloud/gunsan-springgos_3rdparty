@@ -1,0 +1,27 @@
+<!-- Copyright (c) Microsoft Corporation.
+     Licensed under the MIT License. -->
+
+<!-- <EmailSnippet> -->
+{% extends "tutorial/layout.html" %}
+{% block content %}
+<h1>Email</h1>
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">Elapsed time</th>
+      <th scope="col">Message</th>
+      <th scope="col">from Email</th>
+      <th scope="col">to Email</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{{ elapsed_time }}</td>
+      <td>{{ message_body }}</td>
+      <td>{{ from_email }}</td>
+      <td>{{ to_emai }}</td>
+    </tr>    
+  </tbody>
+</table>
+{% endblock %}
+<!-- </EmailSnippet> -->

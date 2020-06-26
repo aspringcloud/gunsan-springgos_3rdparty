@@ -19,6 +19,10 @@ import py_trees
 import kafka
 logging.basicConfig(level=logging.INFO, format='%(asctime)s (%(threadName)-2s) %(message)s',)
 
+# test
+import json
+from django.core.mail import send_mail
+
 #===================== smach =========================
 
 def init_blackboard():
@@ -159,11 +163,21 @@ def callback(request):
 
 # <CalendarViewSnippet>
 def calendar(request):
+  message_body = 'Use this link to log in'
+  send_mail(
+      'Your login link for Superlists',
+      message_body,
+      'bcchoi@aspringcloud.com',
+      ['zaxrok@gmail.com'],
+      fail_silently=False,
+  )
+
   context = initialize_context(request)
 
   token = get_token(request)
 
   events = get_calendar_events(token)
+  print(json.dumps(events, indent=4, sort_keys=True))
 
   if events:
     # Convert the ISO 8601 date times to a datetime object
@@ -177,3 +191,27 @@ def calendar(request):
   return render(request, 'tutorial/calendar.html', context)
 # </CalendarViewSnippet>
 
+
+# <EmailViewSnippet>
+def email(request):
+  start_time = time.time()
+  message_body = 'Use this link to log in'
+  from_email = 'bcchoi@aspringcloud.com'
+  to_email = ['zaxrok@gmail.com']
+  send_mail(
+     'Your login link for Superlists',
+      message_body,
+      from_email,
+      to_email,
+      fail_silently=False,
+  )
+  elapsed_time = time.time() - start_time
+  context = {
+    'elapsed_time':elapsed_time,
+    'message_body': message_body,
+    'from_email':from_email,
+    'to_emai': to_email
+  }
+ 
+  return render(request, 'tutorial/email.html', context)
+# </EmailViewSnippet>

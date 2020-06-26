@@ -34,8 +34,9 @@ def get_weather_every_one_hour():
     t = smach.Sequence(outcomes=['succeeded', 'preempted', 'aborted'],
                           input_keys=['blackboard'], output_keys=['blackboard'], connector_outcome='succeeded')
     with t:
-        smach.Sequence.add('get_weather', sp.get_weather_from_opensite())
-        smach.Sequence.add('post_django', sp.post_weather_to_django())
+        smach.Sequence.add('get_weather_and_post', sp.get_weather_from_opensite_and_post())
+        #smach.Sequence.add('get_dust_and_post', sp.get_dust_from_opensite_and_post())
+        #smach.Sequence.add('post_django', sp.post_weather_to_django())
         smach.Sequence.add('wait_one_hour', sp.preempted_timeout(3600))
     return t
 
