@@ -20,7 +20,7 @@ import diagnostic_updater
 from diagnostic_msgs.msg import DiagnosticStatus
 import json
 import Queue
-#added 2020.06.15
+# added 2020.06.15
 from requests.auth import HTTPBasicAuth
 import kafka
 from geopy.distance import great_circle
@@ -28,12 +28,12 @@ from geopy.distance import great_circle
 import requests
 from datetime import datetime
 
-#added 2020.6.27 for dust api
+# added 2020.6.27 for dust api
 import xmltodict
 
-#InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
-#Adding certificate verification is strongly advised.
-#See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
+# InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
+# Adding certificate verification is strongly advised.
+# See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -203,7 +203,7 @@ class get_vehicle_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'http://115.93.143.2:9103/api/sites'
+            url = 'https://api.aspringcloud.com/api/sites'
             sites = requests.request(
                 method='get',
                 url=url,
@@ -212,7 +212,7 @@ class get_vehicle_site_from_django(smach.State):
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, sites.status_code))
-            url = 'http://115.93.143.2:9103/api/vehicles'
+            url = 'https://api.aspringcloud.com/api/vehicles'
             vehicles = requests.request(
                 method='get',
                 url=url,
@@ -240,7 +240,7 @@ class get_station_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'http://115.93.143.2:9103/api/stations'
+            url = 'https://api.aspringcloud.com/api/stations'
             stations = requests.request(
                 method='get',
                 url=url,
@@ -302,7 +302,7 @@ class post_event_to_django(smach.State):
             data['door'] = how['door']
 
         auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-        url = 'http://115.93.143.2:9103/api/vehicles/{}/'.format(pk)
+        url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
         r = requests.request(
             method='patch',
             url=url,
@@ -369,7 +369,7 @@ class post_eta_to_django_by_1sec(smach.State):
 
 
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://115.93.143.2:9104/api/vehicles/{}/'.format(pk)
+            url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
             r = requests.request(
                 method='patch',
                 url=url,
@@ -834,7 +834,7 @@ class get_weather_from_opensite_and_post(smach.State):
                 data['weather_forecast'] = json.dumps(houly)
 
                 pk = garage['site']
-                url = 'https://115.93.143.2:9104/api/sites/{}/'.format(pk)
+                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
                 #print(url)
                 r = requests.request(
                     method='patch',
@@ -948,7 +948,7 @@ class get_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'http://115.93.143.2:9103/api/garages'
+            url = 'https://api.aspringcloud.com/api/garages'
             garages = requests.request(
                 method='get',
                 url=url,
@@ -1000,7 +1000,7 @@ class get_dust_from_opensite_and_post(smach.State):
                 data['air_quality'] = json.dumps(ret)
 
                 pk = garage['site']
-                url = 'https://115.93.143.2:9104/api/sites/{}/'.format(pk)
+                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
                 #print(url)
                 r = requests.request(
                     method='patch',
