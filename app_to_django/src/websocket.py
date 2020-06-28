@@ -27,7 +27,8 @@ import ssl
 from smach import CBState
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s (%(threadName)-2s) %(message)s',)
-clients = [] # connections = {} 동일한 역할
+clients = []  # connections = {} 동일한 역할
+
 
 class Connection(WebSocket):
 
@@ -38,22 +39,23 @@ class Connection(WebSocket):
 
     def handleMessage(self):
         self.queue.put([self, "text", self.data])
-        #for client in clients:
+        # for client in clients:
         #    if client != self:
         #        client.sendMessage(self.address[0] + u' - ' + self.data)
 
 
     def handleConnected(self):
         print (self.address, 'connected')
-        #for client in clients:
+        # for client in clients:
         #    client.sendMessage(self.address[0] + u' - connected')
         clients.append(self)
 
     def handleClose(self):
         clients.remove(self)
         print (self.address, 'closed')
-        #for client in clients:
+        # for client in clients:
         #    client.sendMessage(self.address[0] + u' - disconnected')
+
 
 class Server(SimpleWebSocketServer):
 
@@ -65,6 +67,7 @@ class Server(SimpleWebSocketServer):
         connection = self.websocketclass(self, sock, address)
         connection.queue = self.queue
         return connection
+
 
 class ThreadServer(Thread):
 
@@ -81,17 +84,17 @@ class ThreadServer(Thread):
     def get_all_connections(self):
         return self.server.connections.values()
 
+
 class WebServer:
     """
     Creates a SimpleWebSocketServer on a new thread
     """
-
     def __init__(self):
         self.server = None
         self.server_thread = None
 
     def start(self):
-        #self.server = SimpleSSLWebSocketServer('0.0.0.0', 9103, Connection,
+        # self.server = SimpleSSLWebSocketServer('0.0.0.0', 9103, Connection,
         #    '/ws/src/app_to_django/cert.pem', '/ws/src/app_to_django/key.pem', ssl.PROTOCOL_TLSv1)
         self.server = SimpleWebSocketServer('0.0.0.0', 9103, Connection)
         self.server_thread = Thread(target=self.server.serveforever)
@@ -117,14 +120,18 @@ def show_epilog():
 def loginfo(msg):
     logging.info(msg)
 
+
 def logwarn(msg):
     logging.warning(msg)
+
 
 def logdebug(msg):
     logging.debug(msg)
 
+
 def logerr(msg):
     logging.error(msg)
+
 
 def test123():
     t = smach.Sequence(outcomes=['succeeded', 'preempted', 'aborted'],
@@ -136,12 +143,13 @@ def test123():
         smach.Sequence.add('3', sp.post_to_django())
     return t
 
+
 def main(config):
-    #smach.set_loggers(loginfo,logwarn,logdebug,logerr) # disable
+    # smach.set_loggers(loginfo,logwarn,logdebug,logerr) # disable
     rospy.init_node("websocket", log_level=rospy.DEBUG, disable_signals=True)
 
-    #web_server = WebServer()
-    #web_server.start()
+    # web_server = WebServer()
+    # web_server.start()
     queue = Queue.Queue()
 
     server = ThreadServer(queue, '', 9103)
@@ -151,10 +159,10 @@ def main(config):
     top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted', 'timeout'])
     top.userdata.blackboard = sp.init_blackboard()
     with top:
-        #smach.StateMachine.add('1', test123(), {'succeeded': 'consumer'})
-        #smach.StateMachine.add('consumer', sp.consumer(), {'succeeded': 'consumer'})
+        # smach.StateMachine.add('1', test123(), {'succeeded': 'consumer'})
+        # smach.StateMachine.add('consumer', sp.consumer(), {'succeeded': 'consumer'})
 
-        #smach.StateMachine.add('2', sp.preempted_timeout(100), {'succeeded': '2'})
+        # smach.StateMachine.add('2', sp.preempted_timeout(100), {'succeeded': '2'})
 
         # 시작시 DB에서 vehicle, site 가져오고
         smach.StateMachine.add('start', sp.get_vehicle_site_from_django(), {'succeeded': 'ping'})
@@ -177,7 +185,8 @@ def main(config):
     outcome = top.execute()
     rospy.signal_shutdown('done!')
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     args = rospy.myargv(sys.argv)
     print(args)
     # Ref : https://docs.python.org/2/library/argparse
@@ -196,7 +205,6 @@ if __name__=="__main__":
 
     parsed_known_args, unknown_args = parser.parse_known_args(sys.argv[1:])
     if parsed_known_args.version:
-        print("version " + sp.__version__ +
-              "\n from " + sp.__file__)
+        print("version " + sp.__version__ + "\n from " + sp.__file__)
         sys.exit(0)
     main(parsed_known_args)

@@ -25,7 +25,6 @@ from requests.auth import HTTPBasicAuth
 import kafka
 from geopy.distance import great_circle
 
-import requests
 from datetime import datetime
 
 # added 2020.6.27 for dust api
@@ -109,6 +108,8 @@ app_to_django    | }
     }
 }
 '''
+
+
 def init_blackboard():
     blackboard = py_trees.blackboard.Blackboard()
     blackboard.pid = None
@@ -118,9 +119,9 @@ def init_blackboard():
         "when": time.time(),
         "where": 'sejong_datahub',
         "who": 'android app',
-        "what": 'EVENT',  #REQ, RESP ,EVET, ERROR
+        "what": 'EVENT',  # REQ, RESP ,EVET, ERROR
         "how": {
-            "type": 'PASSENGER', # 'POWER', 'DOOR'
+            "type": 'PASSENGER',  # 'POWER', 'DOOR'
             "vehicle_id": 6,
             "current_passenger": 1,
             "accumulated_passenger": 17
@@ -139,12 +140,12 @@ class make_eta_from_kafka_until_10min(smach.State):
                              output_keys=['blackboard'])
 
         self.broker = '175.203.98.23:9092'
-        self.topic =  'sgs-kiosk-vehicle' # sim-vehicle
-        self.group =  'sgs-nifi-consumer005'
+        self.topic = 'sgs-kiosk-vehicle'  # sim-vehicle
+        self.group = 'sgs-nifi-consumer005'
         self.consumer = kafka.KafkaConsumer(self.topic,
-                bootstrap_servers = [self.broker], group_id=self.group,
-                enable_auto_commit=True, consumer_timeout_ms=600000 # 10min
-                )
+                                            bootstrap_servers=[self.broker], group_id=self.group,
+                                            enable_auto_commit=True, consumer_timeout_ms=600000  # 10min
+                                            )
 
     def execute(self, ud):
         stations = None
@@ -155,7 +156,7 @@ class make_eta_from_kafka_until_10min(smach.State):
             try:
                 if not len(msg) or not len(msg.value):
                     continue
-                packet = json.loads(msg.value) # string to dictionary
+                packet = json.loads(msg.value)  # string to dictionary
                 if 'type' in packet:
                     if packet['type'] != 'gnss':  # only get gnss pacet
                         continue
@@ -166,8 +167,8 @@ class make_eta_from_kafka_until_10min(smach.State):
                 lonb = 0.0
 
                 if 'message' in packet:
-                    #test
-                    #if 'vhcle_id' in packet['message']:
+                    # test
+                    # if 'vhcle_id' in packet['message']:
                     #    if packet['message']['vhcle_id'] != 'SCN001':
                     #        continue
 
@@ -184,15 +185,16 @@ class make_eta_from_kafka_until_10min(smach.State):
 
                             a = (lata, lona)
                             b = (latb, lonb)
-                            #rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
+                            # rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
 
-                #rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
+                # rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
                 return 'succeeded'
             except UnicodeError:
                 rospy.logerr("UnicodeError - OK")
                 return 'succeeded'
 
         return 'timeout'
+
 
 class get_vehicle_site_from_django(smach.State):
     def __init__(self):
@@ -207,8 +209,8 @@ class get_vehicle_site_from_django(smach.State):
             sites = requests.request(
                 method='get',
                 url=url,
-                auth = auth_ones,
-                verify= None,
+                auth=auth_ones,
+                verify=None,
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, sites.status_code))
@@ -216,8 +218,8 @@ class get_vehicle_site_from_django(smach.State):
             vehicles = requests.request(
                 method='get',
                 url=url,
-                auth = auth_ones,
-                verify= None,
+                auth=auth_ones,
+                verify=None,
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, vehicles.status_code))
@@ -226,7 +228,8 @@ class get_vehicle_site_from_django(smach.State):
                 json.dump(vehicles.json(), json_file)
             with open('/ws/src/app_to_django/sites.json', 'w') as json_file:
                 json.dump(sites.json(), json_file)
-        except:
+        except requests.exceptions.RequestException as e:
+            rospy.logerr('requests {}'.format(e))
             return 'aborted'
         return 'succeeded'
 
@@ -244,16 +247,18 @@ class get_station_from_django(smach.State):
             stations = requests.request(
                 method='get',
                 url=url,
-                auth = auth_ones,
-                verify= None,
+                auth=auth_ones,
+                verify=None,
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, stations.status_code))
             with open('/ws/src/app_to_django/stations.json', 'w') as json_file:
                 json.dump(stations.json(), json_file)
-        except:
+        except requests.exceptions.RequestException as e:
+            rospy.logerr('requests {}'.format(e))
             return 'aborted'
         return 'succeeded'
+
 
 class ping_to_clients(smach.State):
     def __init__(self, server):
@@ -263,6 +268,7 @@ class ping_to_clients(smach.State):
         self.server = server
         self.timeout = 10
         self.start_time = time.time()
+
     def execute(self, ud):
         if time.time() - self.start_time > self.timeout:
             for client in self.server.get_all_connections():
@@ -270,11 +276,9 @@ class ping_to_clients(smach.State):
                         'when': time.time(),
                         'where': 'sejong_datahub',
                         'what': 'PING',
-                        'who': [ "springgos_sejong_2 app"],
-                        'how': {
-                            'ipaddr': client.address
+                        'who': ["springgos_sejong_2 app"],
+                        'how': {'ipaddr': client.address}
                         }
-                    }
                 client.sendMessage(json.dumps(data))
                 rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
             self.start_time = time.time()
@@ -286,6 +290,7 @@ class post_event_to_django(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
+
     def execute(self, ud):
         how = ud.blackboard.message['how']
         data = {}
@@ -306,15 +311,14 @@ class post_event_to_django(smach.State):
         r = requests.request(
             method='patch',
             url=url,
-            data = json.dumps(data),
-            auth = auth_ones,
-            verify= None,
+            data=json.dumps(data),
+            auth=auth_ones,
+            verify=None,
             headers={'Content-type': 'application/json'}
         )
-        if not r is None:
+        if r is not None:
             if r.status_code != 200:
-                res = r.reason
-                rospy.logerr('patch/'+r.reason)
+                rospy.logerr('patch/' + r.reason)
             else:
                 rospy.loginfo('{}, {}'.format(url, r.status_code))
         rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
@@ -329,6 +333,7 @@ class post_eta_to_django_by_1sec(smach.State):
                              output_keys=['blackboard'])
         self.timeout = 2
         self.start_time = time.time()
+
     def execute(self, ud):
         if time.time() - self.start_time > self.timeout:
             pk = 1
@@ -336,29 +341,29 @@ class post_eta_to_django_by_1sec(smach.State):
             station_01 = {
                 'id': 1,
                 'mid': 'STA001',
-                'eta': 13, # minute
-                'distance': 130, # meter
+                'eta': 13,  # minute
+                'distance': 130,  # meter
                 'passed_station': False
             }
             station_02 = {
                 'id': 2,
                 'mid': 'STA002',
-                'eta': 23, # minute
-                'distance': 230, # meter
+                'eta': 23,  # minute
+                'distance': 230,  # meter
                 'passed_station': False
             }
             station_03 = {
                 'id': 3,
                 'mid': 'STA003',
-                'eta': 33, # minute
-                'distance': 330, # meter
+                'eta': 33,  # minute
+                'distance': 330,  # meter
                 'passed_station': False
             }
             station_04 = {
                 'id': 4,
                 'mid': 'STA004',
-                'eta': 43, # minute
-                'distance': 140, # meter
+                'eta': 43,  # minute
+                'distance': 140,  # meter
                 'passed_station': True
             }
             data['eta'] = []
@@ -367,21 +372,19 @@ class post_eta_to_django_by_1sec(smach.State):
             data['eta'].append(json.dumps(station_03))
             data['eta'].append(json.dumps(station_04))
 
-
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
             url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
             r = requests.request(
                 method='patch',
                 url=url,
-                data = json.dumps(data),
-                auth = auth_ones,
-                verify= False,
+                data=json.dumps(data),
+                auth=auth_ones,
+                verify=False,
                 headers={'Content-type': 'application/json'}
             )
-            if not r is None:
+            if r is not None:
                 if r.status_code != 200:
-                    res = r.reason
-                    rospy.logerr('patch/'+r.reason)
+                    rospy.logerr('patch/' + r.reason)
                 else:
                     rospy.loginfo('{}, {}'.format(url, r.status_code))
             rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
@@ -394,8 +397,9 @@ class dummy(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
+
     def execute(self, ud):
-        start_time = time.time()
+        # start_time = time.time()
 
         vehicles = None
         sites = None
@@ -427,6 +431,7 @@ class dummy(smach.State):
         rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
         return 'succeeded'
 
+
 class get_msg_until_sec(smach.State):
     def __init__(self, server, queue, timeout):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
@@ -435,6 +440,7 @@ class get_msg_until_sec(smach.State):
         self.server = server
         self.queue = queue
         self.timeout = timeout
+
     def execute(self, ud):
         start_time = time.time()
         while True:
@@ -444,22 +450,19 @@ class get_msg_until_sec(smach.State):
                 # With False, the queue does not block the program.
                 # It raises Queue.Empty if empty.
                 ud.blackboard.client, kind, ud.blackboard.message = self.queue.get(False)
-                ud.blackboard.message = eval(ud.blackboard.message) # unicode to dictionary
-                #rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
-
-
+                ud.blackboard.message = eval(ud.blackboard.message)  # unicode to dictionary
+                # rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
             except Queue.Empty:
                 kind = None
-            except KeyError:
+            except KeyError as e:
                 kind = None
-                rospy.logerr('KeyError')
-            except SyntaxError:
+                rospy.logerr('KeyError {}'.format(e))
+            except SyntaxError as e:
                 kind = None
-                rospy.logerr('SyntaxError')
-            except NameError:
+                rospy.logerr('SyntaxError {}'.format(e))
+            except NameError as e:
                 kind = None
-                rospy.logerr('NameError')
-
+                rospy.logerr('NameError {}'.format(e))
 
             if kind is not None:
                 # parsing...
@@ -512,7 +515,7 @@ class get_msg_until_sec(smach.State):
                                 break
                         t = ud.blackboard.message['who']
                         ud.blackboard.message['who'] = [t, 'springgos_sejong_2']
-                        #rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                        # rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
                         is_validated = True
                         break
         if is_validated:
@@ -538,6 +541,7 @@ class check_10hour(smach.State):
 
         self.timeout = 36000
         self.start_time = time.time()
+
     def execute(self, ud):
         if time.time() - self.start_time > self.timeout:
             self.start_time = time.time()
@@ -553,6 +557,7 @@ class KeyPress(smach.State):
                                              ],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
+
     def execute(self, ud):
         try:
             used_result = py_trees.console.read_single_keypress()
@@ -564,7 +569,7 @@ class KeyPress(smach.State):
 
                 rospy.loginfo("The Answer was 1!")
                 url = 'http://httpbin.org/post'
-                files = {'bagging_file': open(os.path.dirname(os.path.realpath(__file__))+'/tmp.bag', 'rb')}
+                files = {'bagging_file': open(os.path.dirname(os.path.realpath(__file__)) + '/tmp.bag', 'rb')}
                 r = requests.post(url, files=files)
                 print(r.text)
             elif used_result == '2':
@@ -591,7 +596,6 @@ class UploadFiles(smach.State):
         self.diagnostic_updater.setHardwareID("upload")
         self.diagnostic_updater.add("upload", self.diagnosticCallback)
 
-
     def execute(self, ud):
         timer = rospy.Timer(rospy.Duration(1), self.diagnosticTimerCallback)
 
@@ -606,7 +610,7 @@ class UploadFiles(smach.State):
                 r = requests.post(url, files=files)
                 print(r.text)
                 elapsed_time = time.time() - start_time
-                print('elapse/data', time.strftime("%H:%M:%S", time.gmtime(elapsed_time))+'/'+file_size)
+                print('elapse/data', time.strftime("%H:%M:%S", time.gmtime(elapsed_time)) + '/' + file_size)
 
         except KeyboardInterrupt:
             rospy.logerr("Interrupted by user")
@@ -615,7 +619,6 @@ class UploadFiles(smach.State):
 
         timer.shutdown()
         return 'succeeded'
-
 
     def convert_bytes(self, num):
         """
@@ -642,6 +645,7 @@ class UploadFiles(smach.State):
         stat.summary(DiagnosticStatus.OK, "OK")
         return stat
 
+
 class Rosbag(smach.State):
     def __init__(self, config):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
@@ -658,7 +662,7 @@ class Rosbag(smach.State):
         executable = 'record'
         timer = rospy.Timer(rospy.Duration(1), self.diagnosticTimerCallback)
         try:
-            file = os.path.dirname(os.path.realpath(__file__))+'/tmp.bag'
+            file = os.path.dirname(os.path.realpath(__file__)) + '/tmp.bag'
             args = "--duration={0}s --bz2 -a -b 0 -O {1}".format(str(self.duration), file)
             node = roslaunch.core.Node(package, executable, args=args, name='bag_test', output='screen')
             launch = roslaunch.scriptapi.ROSLaunch()
@@ -684,6 +688,7 @@ class Rosbag(smach.State):
         # always OK
         stat.summary(DiagnosticStatus.OK, "OK")
         return stat
+
 
 class preempted_timeout(smach.State):
     def __init__(self, timeout):
@@ -826,8 +831,8 @@ class get_weather_from_opensite_and_post(smach.State):
                 lat = float(garage['lat'])
                 lon = float(garage['lon'])
 
-                current, houly = self.daily_weather(lat,lon)
-                #rospy.loginfo('{},{}'.format(current,houly))
+                current, houly = self.daily_weather(lat, lon)
+                # rospy.loginfo('{},{}'.format(current,houly))
 
                 data = {}
                 data['current_weather'] = json.dumps(current)
@@ -835,37 +840,36 @@ class get_weather_from_opensite_and_post(smach.State):
 
                 pk = garage['site']
                 url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
-                #print(url)
+                # print(url)
                 r = requests.request(
                     method='patch',
                     url=url,
-                    data = json.dumps(data),
-                    auth = auth_ones,
-                    verify= False,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
                     headers={'Content-type': 'application/json'}
                 )
-                if not r is None:
+                if r is not None:
                     if r.status_code != 200:
-                        res = r.reason
-                        rospy.logerr('patch/'+r.reason)
+                        rospy.logerr('patch/' + r.reason)
                     else:
                         rospy.loginfo('{}, {}'.format(url, r.status_code))
                 rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
-        except TypeError:
-            rospy.logerr('TypeError')
-        except KeyError:
-            rospy.logerr('KeyError')
-        except SyntaxError:
-            rospy.logerr('SyntaxError')
-        except NameError:
-            rospy.logerr('NameError')
+        except TypeError as e:
+            rospy.logerr('TypeError {}'.format(e))
+        except KeyError as e:
+            rospy.logerr('KeyError {}'.format(e))
+        except SyntaxError as e:
+            rospy.logerr('SyntaxError {}'.format(e))
+        except NameError as e:
+            rospy.logerr('NameError {}'.format(e))
 
         return 'succeeded'
 
     def categorization_WeatherState(self, pngname):
-        #해당 정보는 아래의 링크를 따른다.
-        #https://openweathermap.org/weather-conditions
+        # 해당 정보는 아래의 링크를 따른다.
+        # https://openweathermap.org/weather-conditions
         if pngname[:2] in ('01', '02'):
             return 'good'
         elif pngname[:2] in ('03', '04', '50'):
@@ -877,7 +881,7 @@ class get_weather_from_opensite_and_post(smach.State):
 
     def daily_weather(self, lat, lon):
         apiAddr = 'https://api.openweathermap.org/data/2.5/onecall'
-        params = {'lat':lat, 'lon':lon, 'lang':'kr', 'units':'metric', 'appid':self.weather_api_keys, "exclude":'daily'}
+        params = {'lat': lat, 'lon': lon, 'lang': 'kr', 'units': 'metric', 'appid': self.weather_api_keys, "exclude": 'daily'}
         res = requests.get(apiAddr, params=params)
         WeatherData = res.json()
 
@@ -910,23 +914,22 @@ class get_weather_from_opensite_and_post(smach.State):
                 current.weather.description그룹 내 날씨 조건 ( 날씨 조건 전체 목록 ) 당신의 언어로 결과를 얻으십시오
                 current.weather.icon날씨 아이콘 ID 아이콘을 얻는 방법"""
 
-        nowHour = datetime.now().strftime('%H')
-        needTime = [9,12,15,18]
+        # nowHour = datetime.now().strftime('%H')
+        needTime = [9, 12, 15, 18]
         HoulyData = {}
         for HoulyIndex in WeatherData['hourly']:
             s = HoulyIndex['dt']
-            time = int( datetime.utcfromtimestamp(s).strftime('%H') )
-            now = int( datetime.now().strftime('%H'))
+            time = int(datetime.utcfromtimestamp(s).strftime('%H'))
+            now = int(datetime.now().strftime('%H'))
             if int(time) in needTime:
-                HoulyData.setdefault(int( datetime.utcfromtimestamp(s).strftime('%H') ),  )
-                #날씨 구분
-                HoulyData[time] = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState( HoulyIndex['weather'][0]['icon'] ) }
+                HoulyData.setdefault(int(datetime.utcfromtimestamp(s).strftime('%H')),)
+                # 날씨 구분
+                HoulyData[time] = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState(HoulyIndex['weather'][0]['icon'])}
             if now == time:
-                #print(HoulyIndex['weather'][0]['icon'])
-                CurrentWeatherData = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState( HoulyIndex['weather'][0]['icon'] ) }
+                # print(HoulyIndex['weather'][0]['icon'])
+                CurrentWeatherData = {'temp': HoulyIndex['temp'], 'weather': self.categorization_WeatherState(HoulyIndex['weather'][0]['icon'])}
 
         return CurrentWeatherData, HoulyData
-
 
 
 class post_weather_to_django(smach.State):
@@ -934,9 +937,9 @@ class post_weather_to_django(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
+
     def execute(self, ud):
         return 'succeeded'
-
 
 
 class get_site_from_django(smach.State):
@@ -952,14 +955,16 @@ class get_site_from_django(smach.State):
             garages = requests.request(
                 method='get',
                 url=url,
-                auth = auth_ones,
-                verify= None,
+                auth=auth_ones,
+                verify=None,
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, garages.status_code))
             with open('/ws/src/app_to_django/garages.json', 'w') as json_file:
                 json.dump(garages.json(), json_file)
-        except:
+
+        except requests.exceptions.RequestException as e:
+            rospy.logerr('requests {}'.format(e))
             return 'aborted'
 
         return 'succeeded'
@@ -971,12 +976,12 @@ class get_dust_from_opensite_and_post(smach.State):
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
         self.dust_api_keys = 'zHKzBSmpIIz6sd3aUeDAW5Ee7BoMdjVN%2FF9yTZFDyHeYzL6sKz44TA3sypR0Sg%2BPbqtGX5lRNE0Yj3MvI6aJ0w%3D%3D'
-        #카카오 Developers key [ 1일 1만건 가능]
-        #관련 API 링크
+        # 카카오 Developers key [ 1일 1만건 가능]
+        # 관련 API 링크
         # https://developers.kakao.com/docs/latest/ko/local/dev-guide
         self.KaKaoRestAPIKey = 'ea2dfc54f13d1eeaeca07fd6fcf11c53'
         self.Host = 'https://dapi.kakao.com'
-        self.APIAddr ='/v2/local/geo/coord2address.json?input_coord=WGS84'
+        self.APIAddr = '/v2/local/geo/coord2address.json?input_coord=WGS84'
 
     def execute(self, ud):
         try:
@@ -988,44 +993,43 @@ class get_dust_from_opensite_and_post(smach.State):
             for garage in garages:
                 lat = float(garage['lat'])
                 lon = float(garage['lon'])
-                ret = self.DustNOzoneInfo(lon,lat)
+                ret = self.DustNOzoneInfo(lon, lat)
                 if ret is False:
                     rospy.logerr('get error from DustNOzoneInfo')
                     continue
 
-                #current, houly = self.daily_weather(lat,lon)
-                #rospy.loginfo('{},{}'.format(current,houly))
-                #print(type(ret))
+                # current, houly = self.daily_weather(lat,lon)
+                # rospy.loginfo('{},{}'.format(current,houly))
+                # print(type(ret))
                 data = {}
                 data['air_quality'] = json.dumps(ret)
 
                 pk = garage['site']
                 url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
-                #print(url)
+                # print(url)
                 r = requests.request(
                     method='patch',
                     url=url,
-                    data = json.dumps(data),
-                    auth = auth_ones,
-                    verify= False,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
                     headers={'Content-type': 'application/json'}
                 )
-                if not r is None:
+                if r is not None:
                     if r.status_code != 200:
-                        res = r.reason
-                        rospy.logerr('patch/'+r.reason)
+                        rospy.logerr('patch/' + r.reason)
                     else:
                         rospy.loginfo('{}, {}'.format(url, r.status_code))
                 rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
-        except TypeError:
-            rospy.logerr('TypeError')
-        except KeyError:
-            rospy.logerr('KeyError')
-        except SyntaxError:
-            rospy.logerr('SyntaxError')
-        except NameError:
-            rospy.logerr('NameError')
+        except TypeError as e:
+            rospy.logerr('TypeError {}'.format(e))
+        except KeyError as e:
+            rospy.logerr('KeyError {}'.format(e))
+        except SyntaxError as e:
+            rospy.logerr('SyntaxError {}'.format(e))
+        except NameError as e:
+            rospy.logerr('NameError {}'.format(e))
 
         return 'succeeded'
 
@@ -1033,7 +1037,7 @@ class get_dust_from_opensite_and_post(smach.State):
         # lon = x
         # lat = y
         header = {"Authorization": str("KakaoAK " + self.KaKaoRestAPIKey)}
-        url = self.Host + self.APIAddr+"&x="+str(lon)+"&y="+str(lat)
+        url = self.Host + self.APIAddr + "&x=" + str(lon) + "&y=" + str(lat)
         res = requests.get(url, headers=header)
         if res.status_code == 200:
             addr = res.json()
@@ -1048,26 +1052,34 @@ class get_dust_from_opensite_and_post(smach.State):
             elif len(region1) > 3:
                 region1 = region1[:2]
 
-        return region1, region2
+        return region1, region3
 
     def DetectNearCites(self, sido, stationName):
-        #현재 주소를 TM 체계의 좌표로 바꾸기 위한 API 주소
+        # 현재 주소를 TM 체계의 좌표로 바꾸기 위한 API 주소
         GetTMPositon_API = 'http://openapi.airkorea.or.kr/openapi/services/rest/MsrstnInfoInqireSvc/getTMStdrCrdnt'
         # TM 체계의 주소로 가까운 측정소의 위치를 찾기 위한 API 주소
         GetNearDetector_API = 'http://openapi.airkorea.or.kr/openapi/services/rest/MsrstnInfoInqireSvc/getNearbyMsrstnList'
 
         # 1. 좌표를 얻은 "동"이름으로 TM 좌표를 얻음.
-        GetTMURL = GetTMPositon_API+"?ServiceKey="+self.dust_api_keys+"&umdName="+stationName
+        GetTMURL = GetTMPositon_API + "?ServiceKey=" + self.dust_api_keys + "&umdName=" + stationName
         GetTMres = requests.get(GetTMURL)
+        # if GetTMres.status_code == 200:
+        #     print(GetTMres.text.encode('utf-8'))
+        #     TMDataList = self.xml2Dict(GetTMres.text)['response']['body']['items']['item']
+        # else:
+        #     return False
         if GetTMres.status_code == 200:
-            print(GetTMres.text.encode('utf-8'))
-            TMDataList = self.xml2Dict(GetTMres.text)['response']['body']['items']['item']
+            TMDataList = self.xml2Dict(GetTMres.text)
+            if TMDataList['response']['body']['items'] is None:
+                return False
+            else:
+                TMDataList = self.xml2Dict(GetTMres.text)['response']['body']['items']['item']
         else:
             return False
 
         tmX = tmY = None
-        #해당 동이 포함된 리스트를 탐색
-        #print(type(TMDataList))
+        # 해당 동이 포함된 리스트를 탐색
+        # print(type(TMDataList))
         newobj = []
         if isinstance(TMDataList, dict):
             newobj.append(TMDataList)
@@ -1085,8 +1097,8 @@ class get_dust_from_opensite_and_post(smach.State):
             rospy.logerr('not found sidoName')
 
         # 2. 이렇게 얻은 tmX,tmY 좌표를 이용하여, 가까운 측정소 탐색
-        GetStationURL = GetNearDetector_API + "?ServiceKey="+self.dust_api_keys+"&tmX="+tmX+"&tmY="+tmY
-        GetStationres = requests.get( GetStationURL )
+        GetStationURL = GetNearDetector_API + "?ServiceKey=" + self.dust_api_keys + "&tmX=" + tmX + "&tmY=" + tmY
+        GetStationres = requests.get(GetStationURL)
 
         StationList = []
         if GetStationres.status_code == 200:
@@ -1113,21 +1125,21 @@ class get_dust_from_opensite_and_post(smach.State):
         return resultDict
 
     def DustNOzoneInfo(self, lon, lat):
-        #미세먼지 탐색을 위한, API 경로
+        # 미세먼지 탐색을 위한, API 경로
         dustApiAddr = 'http://openapi.airkorea.or.kr/openapi/services/rest/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty'
 
-        #params 옵션을 이용한 인자 전달 시, 서비스 키가 지속적으로 변경되는 문제가 발생. 따라서 메뉴얼적인 문자 조합으로 조회 수행
-        #params = {'serviceKey': self.dust_api_keys, 'numOfRows':10, 'pageNo':1, 'sidoName':sido, 'ver':1.3}
+        # params 옵션을 이용한 인자 전달 시, 서비스 키가 지속적으로 변경되는 문제가 발생. 따라서 메뉴얼적인 문자 조합으로 조회 수행
+        # params = {'serviceKey': self.dust_api_keys, 'numOfRows':10, 'pageNo':1, 'sidoName':sido, 'ver':1.3}
 
         sido, stationName = self.coord2addres(lon, lat)
-        print(sido.encode('utf-8'),stationName.encode('utf-8'))
+        print(sido.encode('utf-8'), stationName.encode('utf-8'))
         targetStation = self.DetectNearCites(sido, stationName)
-        #print( sido, stationName )
-        #주소를 찾지 못할 경우
-        #if sido == False:
+        # print( sido, stationName )
+        # 주소를 찾지 못할 경우
+        # if sido == False:
         #    return False
 
-        url = dustApiAddr +"?serviceKey="+self.dust_api_keys+"&sidoName="+sido+"&ver="+str(1.3)
+        url = dustApiAddr + "?serviceKey=" + self.dust_api_keys + "&sidoName=" + sido + "&ver=" + str(1.3)
         res = requests.get(url)
 
         """
@@ -1147,7 +1159,7 @@ class get_dust_from_opensite_and_post(smach.State):
                 print(key.encode('utf-8'))
 
             print('-----------------------')
-
+            '''
             for targetStationIndex in targetStation:
                 print(targetStationIndex.encode('utf-8'))
                 if targetStationIndex in Dict_StationInfo.keys():
@@ -1155,6 +1167,21 @@ class get_dust_from_opensite_and_post(smach.State):
             # if not found
             for key in Dict_StationInfo.keys():
                 return Dict_StationInfo[key]
+            '''
+            if targetStation is False:
+                for StationInfoIndex in Dict_StationInfo:
+                    if Dict_StationInfo[StationInfoIndex]['o3Grade'] is not None and Dict_StationInfo[StationInfoIndex]['pm10Grade'] is not None and \
+                       Dict_StationInfo[StationInfoIndex]['pm25Grade'] is not None and Dict_StationInfo[StationInfoIndex]['no2Grade'] is not None:
+                        return Dict_StationInfo[StationInfoIndex]
+
+            else:
+                # 목록에 같은 동이 있을 경우.
+                if stationName in Dict_StationInfo.keys() and Dict_StationInfo[stationName]['o3Grade'] is not None and Dict_StationInfo[stationName]['pm10Grade'] is not None and Dict_StationInfo[stationName]['pm25Grade1h'] is not None and Dict_StationInfo[stationName]['no2Grade'] is not None:
+                    return Dict_StationInfo[stationName]
+                else:
+                    for StationInfoIndex in Dict_StationInfo:
+                        if Dict_StationInfo[StationInfoIndex]['o3Grade'] is not None and Dict_StationInfo[StationInfoIndex]['pm10Grade'] is not None and Dict_StationInfo[StationInfoIndex]['pm25Grade'] is not None and Dict_StationInfo[StationInfoIndex]['no2Grade'] is not None:
+                            return Dict_StationInfo[StationInfoIndex]
 
         return False
 

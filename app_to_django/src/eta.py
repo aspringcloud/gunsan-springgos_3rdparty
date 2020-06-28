@@ -26,6 +26,8 @@ app_to_django    | [INFO] [1592373107.688052]: site 2, station STA002, 643.89419
 app_to_django    | [INFO] [1592373107.689314]: site 2, station STA003, 781.124017m
 app_to_django    | [INFO] [1592373107.690575]: site 2, station STA004, 490.352185m
 '''
+
+
 def show_description():
     return "Test ROS node"
 
@@ -44,8 +46,8 @@ def main(config):
     top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted', 'timeout'])
     top.userdata.blackboard = sp.init_blackboard()
     with top:
-        #smach.StateMachine.add('start', sp.post_eta_to_django(), {'succeeded': 'timeout'})
-        #smach.StateMachine.add('timeout', sp.preempted_timeout(100), {'succeeded': 'timeout'})
+        # smach.StateMachine.add('start', sp.post_eta_to_django(), {'succeeded': 'timeout'})
+        # smach.StateMachine.add('timeout', sp.preempted_timeout(100), {'succeeded': 'timeout'})
 
         smach.StateMachine.add('start', sp.get_station_from_django(), {'succeeded': 'make'})
         smach.StateMachine.add('make', sp.make_eta_from_kafka_until_10min(),
@@ -54,13 +56,11 @@ def main(config):
             'timeout': 'check'      # 10min 초과하면 check_10houre로
         })
         smach.StateMachine.add('post', sp.post_eta_to_django_by_1sec(), {'succeeded': 'check'})
-        smach.StateMachine.add('check', sp.check_10hour(), 
+        smach.StateMachine.add('check', sp.check_10hour(),
         {
             'succeeded': 'make',        # 10시간 초과 안되면 make_from_kafka로
             'timeout': 'start'          # 10시간 초과하면 get_station
         })
-
-
 
     '''
         get_station_from_django()
@@ -72,6 +72,7 @@ def main(config):
 
     outcome = top.execute()
     rospy.signal_shutdown('done!')
+
 
 if __name__=="__main__":
     args = rospy.myargv(sys.argv)
@@ -92,7 +93,6 @@ if __name__=="__main__":
 
     parsed_known_args, unknown_args = parser.parse_known_args(sys.argv[1:])
     if parsed_known_args.version:
-        print("version " + sp.__version__ +
-              "\n from " + sp.__file__)
+        print("version " + sp.__version__ + "\n from " + sp.__file__)
         sys.exit(0)
     main(parsed_known_args)
