@@ -106,6 +106,97 @@ app_to_django    | }
         vehicle_mid:
         ?
     }
+    tasio -> server
+    when: timestamp
+    where: site pk
+    who: [tasio]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        command: call
+    }
+    safe -> server
+    who: [safe]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        command: start
+    }
+    safe -> server
+    who: [safe]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        command: complete
+    }
+    server -> safe
+    who: [tasio, server]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        vehicle_mid:
+        site:
+        command: call
+    }
+    server -> tasio
+    who: [safe, server]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        vehicle_mid:
+        site:
+        command: start
+    }
+    server -> web[x]
+    who: [safe, server]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        vehicle_mid:
+        site:
+        command: start
+    }
+    server -> tasio
+    who: [safe, server]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        vehicle_mid:
+        site:
+        command: complete
+    }
+    server -> web[x]
+    who: [safe, server]
+    what: request
+    how: {
+        type: ondemand
+        vehicle_id:
+        vehicle_mid:
+        site:
+        command: complete
+    }
+
+    server -> connected client
+    who: [connected client, server]
+    what: request
+    how: {
+        type: identity
+        address: 211.134.131.2
+    }
+    connected client -> server
+    who: [connected client]
+    what: resp
+    how: {
+        type: identity
+        identity: tasio_3949
+    }
 }
 '''
 
@@ -157,6 +248,9 @@ class make_eta_from_kafka_until_10min(smach.State):
                 if not len(msg) or not len(msg.value):
                     continue
                 packet = json.loads(msg.value)  # string to dictionary
+                if not isinstance(packet, dict):
+                    continue
+
                 if 'type' in packet:
                     if packet['type'] != 'gnss':  # only get gnss pacet
                         continue
@@ -189,9 +283,16 @@ class make_eta_from_kafka_until_10min(smach.State):
 
                 # rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
                 return 'succeeded'
-            except UnicodeError:
-                rospy.logerr("UnicodeError - OK")
-                return 'succeeded'
+            except UnicodeError as e:
+                rospy.logerr('UnicodeError {}'.format(e))
+            except TypeError as e:
+                rospy.logerr('TypeError {}'.format(e))
+            except KeyError as e:
+                rospy.logerr('KeyError {}'.format(e))
+            except SyntaxError as e:
+                rospy.logerr('SyntaxError {}'.format(e))
+            except NameError as e:
+                rospy.logerr('NameError {}'.format(e))
 
         return 'timeout'
 
@@ -276,7 +377,7 @@ class ping_to_clients(smach.State):
                         'when': time.time(),
                         'where': 'sejong_datahub',
                         'what': 'PING',
-                        'who': ["springgos_sejong_2 app"],
+                        'who': "springgos_sejong_1",
                         'how': {'ipaddr': client.address}
                         }
                 client.sendMessage(json.dumps(data))
@@ -297,14 +398,26 @@ class post_event_to_django(smach.State):
         pk = None
         if 'vehicle_id' in how:
             pk = how['vehicle_id']
-        if 'current_passenger' in how:
-            data['passenger'] = how['current_passenger']
-        if 'parking' in how:
-            data['isparked'] = how['parking']
-        if 'drive' in how:
-            data['drive'] = how['drive']
-        if 'door' in how:
-            data['door'] = how['door']
+
+        if 'type' in how:
+            if how['type'] == 'passenger':
+                data['passenger'] = how['current_passenger']
+            if how['type'] == 'power':
+                pass
+            if how['type'] == 'parking':
+                data['isparked'] = how['value']
+            if how['type'] == 'drive':
+                data['drive'] = how['value']
+            if how['type'] == 'door':
+                data['door'] = how['value']
+            if how['type'] == 'message':
+                pass
+            if how['type'] == 'station':
+                data['passed_station'] = how['value']
+
+        if not data:
+            rospy.logerr('empty data to post')
+            return 'succeeded'
 
         auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
         url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
@@ -479,11 +592,11 @@ class get_msg_until_sec(smach.State):
                 "what": "EVENT",
                 "when": 1592372883.060738,
                 "where": "sejong_datahub",
-                "who": ["android app", "springgos_sejong_2"]
+                "who": ["android app", "springgos_sejong_1"]
                 }'''
                 self.queue.task_done()
                 break
-            time.sleep(0.1)
+            time.sleep(0.2)
 
         vehicles = None
         sites = None
@@ -492,6 +605,10 @@ class get_msg_until_sec(smach.State):
         with open('/ws/src/app_to_django/sites.json') as json_file:
             sites = json.load(json_file)
         sites = sites['results']
+        if 'what' in ud.blackboard.message:
+            if ud.blackboard.message['what'] != 'REQ' and ud.blackboard.message['what'] != 'EVENT':
+                rospy.loginfo('REQ or EVENT or PING {}'.format(json.dumps(ud.blackboard.message, indent=4, sort_keys=True)))
+                return 'timeout'
 
         is_validated = False
         for vehicle in vehicles:
@@ -513,20 +630,43 @@ class get_msg_until_sec(smach.State):
                                 ud.blackboard.message['how'].update({'site_id': site['id']})
                                 ud.blackboard.message['how'].update({'vehicle_mid': vehicle['mid']})
                                 break
-                        t = ud.blackboard.message['who']
-                        ud.blackboard.message['who'] = [t, 'springgos_sejong_2']
+                        ud.blackboard.message['when'] = time.time()
+                        ud.blackboard.message['who'] = 'springgos_sejong_1'
+                        ud.blackboard.message['where'] = 'sejong_datahub'
                         # rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
                         is_validated = True
                         break
+
         if is_validated:
             for client in self.server.get_all_connections():
                 if ud.blackboard.client == client:
-                    data = ud.blackboard.message
-                    data['what'] = 'RESP'
-                    client.sendMessage(json.dumps(data))
-                    rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
-                else:
+                    ud.blackboard.message['what'] = 'RESP'
                     client.sendMessage(json.dumps(ud.blackboard.message))
+                    rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                else:
+                    ud.blackboard.message['what'] = 'EVENT'
+                    is_ondemand = False
+                    is_function_call = False
+                    is_function_start = False
+                    is_function_complete = False
+                    if 'type' in ud.blackboard.message['how']:
+                        if ud.blackboard.message['how']['type'] == 'ondemand':
+                            is_ondemand = True
+
+                    if 'function' in ud.blackboard.message['how']:
+                        if ud.blackboard.message['how']['function'] == 'start':
+                            is_function_start = True
+
+                    if is_ondemand and is_function_start:
+                        '''
+                        예상도착시간, 예상이동시간
+                        '''
+                        ud.blackboard.message['how'].update({'eta': 1})
+                        client.sendMessage(json.dumps(ud.blackboard.message))
+
+                    # else: ondemand 이외에는 처리 하지 않는다.
+                    #     client.sendMessage(json.dumps(ud.blackboard.message))
+
                     rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
             return 'succeeded'
 

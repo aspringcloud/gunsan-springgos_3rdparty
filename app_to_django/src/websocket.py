@@ -38,11 +38,11 @@ class Connection(WebSocket):
         self.queue = None
 
     def handleMessage(self):
+        print('1')
         self.queue.put([self, "text", self.data])
         # for client in clients:
         #    if client != self:
         #        client.sendMessage(self.address[0] + u' - ' + self.data)
-
 
     def handleConnected(self):
         print (self.address, 'connected')
@@ -168,7 +168,7 @@ def main(config):
         smach.StateMachine.add('start', sp.get_vehicle_site_from_django(), {'succeeded': 'ping'})
         # 클라 핑주고 
         smach.StateMachine.add('ping', sp.ping_to_clients(server), {'succeeded': 'msg'})
-        # 10초 안에 웹소켓으로 데이터 들어 오면 vehicle, site정보 이용해서 보낸 클라제외하고 모든 클라한테 보낼 메시지 만들어 모두 전소
+        # x초 안에 웹소켓으로 데이터 들어 오면 vehicle, site정보 이용해서 보낸 클라제외하고 모든 클라한테 보낼 메시지 만들어 모두 전송
         smach.StateMachine.add('msg', sp.get_msg_until_sec(server, queue, 20),
         {
             'succeeded': 'post',    # 데이터가 들어오면 post로

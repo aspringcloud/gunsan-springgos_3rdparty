@@ -41,8 +41,13 @@ def show_epilog():
     return "never enough testing"
 
 
+def log(msg):
+    pass
+
+
 def main(config):
-    rospy.init_node("eta", log_level=rospy.DEBUG, disable_signals=True)
+    rospy.init_node("eta", log_level=rospy.INFO, disable_signals=True)
+    smach.set_loggers(log,log,log,log) # disable
     top = smach.StateMachine(outcomes=['succeeded', 'preempted', 'aborted', 'timeout'])
     top.userdata.blackboard = sp.init_blackboard()
     with top:
