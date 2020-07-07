@@ -30,6 +30,9 @@ from datetime import datetime
 # added 2020.6.27 for dust api
 import xmltodict
 
+# eta
+from .ETA import Sites_Estiamtetime
+
 # InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
 # Adding certificate verification is strongly advised.
 # See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
@@ -373,6 +376,7 @@ class ping_to_clients(smach.State):
     def execute(self, ud):
         if time.time() - self.start_time > self.timeout:
             for client in self.server.get_all_connections():
+                
                 data = {'version': 1,
                         'when': time.time(),
                         'where': 'sejong_datahub',
@@ -381,7 +385,8 @@ class ping_to_clients(smach.State):
                         'how': {'ipaddr': client.address}
                         }
                 client.sendMessage(json.dumps(data))
-                rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+                # rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
+                rospy.logdebug('{} PING'.format(client))
             self.start_time = time.time()
         return 'succeeded'
 
@@ -439,6 +444,32 @@ class post_event_to_django(smach.State):
         return 'succeeded'
 
 
+class eta(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+        self.gstations = [9,10,11,12,13]
+        self.gsite_id = 1
+    def execute(self, ud):
+        for station in self.gstations:
+            veta = Sites_Estiamtetime(self.gsite_id, station)
+            for v_id, eta in veta.items():
+                print(station, v_id, eta)
+        return 'succeeded'
+
+
+class post_eta(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+    def execute(self, ud):
+        return 'succeeded'
+
+
+        
 class post_eta_to_django_by_1sec(smach.State):
     def __init__(self):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
@@ -564,7 +595,7 @@ class get_msg_until_sec(smach.State):
                 # It raises Queue.Empty if empty.
                 ud.blackboard.client, kind, ud.blackboard.message = self.queue.get(False)
                 ud.blackboard.message = eval(ud.blackboard.message)  # unicode to dictionary
-                # rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
             except Queue.Empty:
                 kind = None
             except KeyError as e:
@@ -656,12 +687,35 @@ class get_msg_until_sec(smach.State):
                     if 'function' in ud.blackboard.message['how']:
                         if ud.blackboard.message['how']['function'] == 'start':
                             is_function_start = True
+                    
+                    if 'function' in ud.blackboard.message['how']:
+                        if ud.blackboard.message['how']['function'] == 'call':
+                            is_function_call = True
+                    
+                    if 'function' in ud.blackboard.message['how']:
+                        if ud.blackboard.message['how']['function'] == 'complete':
+                            is_function_complete = True
 
                     if is_ondemand and is_function_start:
                         '''
                         예상도착시간, 예상이동시간
                         '''
+                        rospy.loginfo('is_function_start')
                         ud.blackboard.message['how'].update({'eta': 1})
+                        client.sendMessage(json.dumps(ud.blackboard.message))
+
+                    if is_ondemand and is_function_call:
+                        '''
+                        새로운 필드 추가
+                        '''
+                        rospy.loginfo('is_function_call')
+                        client.sendMessage(json.dumps(ud.blackboard.message))
+
+                    if is_ondemand and is_function_complete:
+                        '''
+                        새로운 필드 추가
+                        '''
+                        rospy.loginfo('is_function_complete')
                         client.sendMessage(json.dumps(ud.blackboard.message))
 
                     # else: ondemand 이외에는 처리 하지 않는다.
