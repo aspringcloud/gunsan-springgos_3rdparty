@@ -453,29 +453,32 @@ class estiamte_eta_and_post(smach.State):
         self.gsite_id = 1
     def execute(self, ud):
         data = {}
-        for station in self.gstations:
-            veta = Sites_Estiamtetime(self.gsite_id, station)
-            # for v_id, eta in veta.items():
-            #     print(station, v_id, eta)
-            data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
-            data['eta'].append(json.dumps(veta))
-            auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
-            r = requests.request(
-                method='patch',
-                url=url,
-                data=json.dumps(data),
-                auth=auth_ones,
-                verify=False,
-                headers={'Content-type': 'application/json'}
-            )
-            if r is not None:
-                if r.status_code != 200:
-                    rospy.logerr('patch/' + r.reason)
-                else:
-                    rospy.loginfo('{}, {}'.format(url, r.status_code))
-            rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
-
+        try:
+            for station in self.gstations:
+                veta = Sites_Estiamtetime(self.gsite_id, station)
+                # for v_id, eta in veta.items():
+                #     print(station, v_id, eta)
+                data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
+                data['eta'].append(json.dumps(veta))
+                auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+                url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+                rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
+        except requests.exceptions.RequestException as e:  # Max retries exceeded with
+            rospy.logerr('requests {}'.format(e))
+            return 'succeeded'  # retry
         return 'succeeded'
 
         
