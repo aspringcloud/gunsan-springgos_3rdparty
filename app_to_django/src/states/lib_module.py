@@ -439,6 +439,21 @@ class post_event_to_django(smach.State):
                 rospy.logerr('patch/' + r.reason)
             else:
                 rospy.loginfo('{}, {}'.format(url, r.status_code))
+
+        url = 'http://115.93.143.2:9103/api/vehicles/{}/'.format(pk)
+        r = requests.request(
+            method='patch',
+            url=url,
+            data=json.dumps(data),
+            auth=auth_ones,
+            verify=None,
+            headers={'Content-type': 'application/json'}
+        )
+        if r is not None:
+            if r.status_code != 200:
+                rospy.logerr('103 patch/' + r.reason)
+            else:
+                rospy.loginfo('{}, {}'.format(url, r.status_code))
         rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
         return 'succeeded'
@@ -475,7 +490,23 @@ class estiamte_eta_and_post(smach.State):
                         rospy.logerr('patch/' + r.reason)
                     else:
                         rospy.loginfo('{}, {}'.format(url, r.status_code))
+
+                url = 'http://115.93.143.2:9103/api/stations/{}/'.format(station)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('103 patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
                 rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
+
         except requests.exceptions.RequestException as e:  # Max retries exceeded with
             rospy.logerr('requests {}'.format(e))
             return 'succeeded'  # retry
@@ -1060,6 +1091,21 @@ class get_weather_from_opensite_and_post(smach.State):
                         rospy.logerr('patch/' + r.reason)
                     else:
                         rospy.loginfo('{}, {}'.format(url, r.status_code))
+
+                url = 'http://115.93.143.2:9103/api/sites/{}/'.format(pk)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('103 patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
                 rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
 
         except TypeError as e:
@@ -1224,6 +1270,21 @@ class get_dust_from_opensite_and_post(smach.State):
                 if r is not None:
                     if r.status_code != 200:
                         rospy.logerr('patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+
+                url = 'http://115.93.143.2:9103/api/sites/{}/'.format(pk)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('103 patch/' + r.reason)
                     else:
                         rospy.loginfo('{}, {}'.format(url, r.status_code))
                 rospy.logdebug(json.dumps(data, indent=4, sort_keys=True))
