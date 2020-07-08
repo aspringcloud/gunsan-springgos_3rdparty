@@ -36,7 +36,7 @@ services:
         pm2-runtime /ws/src/app_to_django/pm2.json
     restart: always
     ports:
-      - 9103:9103
+      - 11411:9103
     networks:
       rosnet:
         ipv4_address: 172.18.0.101
