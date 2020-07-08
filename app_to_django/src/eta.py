@@ -56,14 +56,8 @@ def main(config):
         # 1. 5초마다 eta 실행
         # 2. stationo에 eta post
         # 3. 1번 반복 
-        smach.StateMachine.add('5sec', sp.preempted_timeout(5), {'succeeded': 'eta'})
-            
-        smach.StateMachine.add('eta', sp.eta(), 
-        {
-            'succeeded': 'post',
-            'timeout': '5sec'
-        })
-        smach.StateMachine.add('post', sp.post_eta(), {'succeeded': '5sec'})
+        smach.StateMachine.add('5sec', sp.preempted_timeout(15), {'succeeded': 'eta'})
+        smach.StateMachine.add('eta', sp.estiamte_eta_and_post(), {'succeeded': '5sec'})
     
     '''
         smach.StateMachine.add('start', sp.get_station_from_django(), {'succeeded': 'make'})
