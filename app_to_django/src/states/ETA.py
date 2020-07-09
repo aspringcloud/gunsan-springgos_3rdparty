@@ -112,11 +112,27 @@ def CalcTotalETA(stationETA, vehi, StationsPos):
             # 다음 station의 좌표 정보 획득
             lat, lon = StationsPos[suttle_route[0]].values()
 
+            lat = lat.decode('utf-8').encode('utf-8')
+            lon = lon.decode('utf-8').encode('utf-8')
             # 이전 스테이션의 GPS 정보 획득
             lat_passed, lon_passed = StationsPos[vehi['passed_station']].values()
 
+            lat_passed = lat_passed.decode('utf-8').encode('utf-8')
+            lon_passed = lon_passed.decode('utf-8').encode('utf-8')
+            
             # 현재 차량의 GPS 정보 획득
-            lat_vehi, lon_vehi = vehi['lat'], vehi['lon']
+            #lat_vehi, lon_vehi = vehi['lat'], vehi['lon']
+            # Unicode to utf-8
+            print("VehiNo", vehi['mid'], "lat:", vehi['lat'], " lon: ", vehi['lon'])
+            
+            # 차량의 gps 값이 들어오지 않았을 경우, 패스
+            if not vehi['lat'] or not vehi['lon']:
+                print("pass!")
+                continue
+            
+            # unicode 'utf-8'로 변환
+            lat_vehi = unicode(vehi['lat']).decode('utf-8').encode('utf-8')
+            lon_vehi = unicode(vehi['lon']).decode('utf-8').encode('utf-8')
 
             # euclidean 상대 거리로 계산 시간 가중 계산
             max = GPSeuclidean.GeoUtil.get_euclidean_distance(float(lon), float(lat), float(lon_passed), float(lat_passed))

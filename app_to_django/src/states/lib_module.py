@@ -309,7 +309,7 @@ class get_vehicle_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/sites'
+            url = 'https://test.aspringcloud.com/api/sites'
             sites = requests.request(
                 method='get',
                 url=url,
@@ -318,7 +318,7 @@ class get_vehicle_site_from_django(smach.State):
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, sites.status_code))
-            url = 'https://api.aspringcloud.com/api/vehicles'
+            url = 'https://test.aspringcloud.com/api/vehicles'
             vehicles = requests.request(
                 method='get',
                 url=url,
@@ -347,7 +347,7 @@ class get_station_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/stations'
+            url = 'https://test.aspringcloud.com/api/stations'
             stations = requests.request(
                 method='get',
                 url=url,
@@ -425,7 +425,7 @@ class post_event_to_django(smach.State):
             return 'succeeded'
 
         auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-        url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
+        url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(pk)
         r = requests.request(
             method='patch',
             url=url,
@@ -464,48 +464,50 @@ class estiamte_eta_and_post(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
-        self.gstations = [9,10,11,12,13]
-        self.gsite_id = 1
+        self.gstations = {1:[9,10,11,12,13], 2:[1, 2, 3, 4]}
+        self.gsite_id = [1, 2]
     def execute(self, ud):
         data = {}
         try:
-            for station in self.gstations:
-                veta = Sites_Estiamtetime(self.gsite_id, station)
-                # for v_id, eta in veta.items():
-                #     print(station, v_id, eta)
-                data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
-                data['eta'].append(json.dumps(veta))
-                auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-                url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
-                r = requests.request(
-                    method='patch',
-                    url=url,
-                    data=json.dumps(data),
-                    auth=auth_ones,
-                    verify=False,
-                    headers={'Content-type': 'application/json'}
-                )
-                if r is not None:
-                    if r.status_code != 200:
-                        rospy.logerr('patch/' + r.reason)
-                    else:
-                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+            #대구도 작동하게 하기 위한 변경
+            for gsiteindex in self.gsite_id:
+                for station in self.gstations[gsiteindex]:
+                    veta = Sites_Estiamtetime(gsiteindex, station)
+                    # for v_id, eta in veta.items():
+                    #     print(station, v_id, eta)
+                    data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
+                    data['eta'].append(json.dumps(veta))
+                    auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+                    url = 'https://test.aspringcloud.com/api/stations/{}/'.format(station)
+                    r = requests.request(
+                        method='patch',
+                        url=url,
+                        data=json.dumps(data),
+                        auth=auth_ones,
+                        verify=False,
+                        headers={'Content-type': 'application/json'}
+                    )
+                    if r is not None:
+                        if r.status_code != 200:
+                            rospy.logerr('patch/' + r.reason)
+                        else:
+                            rospy.loginfo('{}, {}'.format(url, r.status_code))
 
-                url = 'http://115.93.143.2:9103/api/stations/{}/'.format(station)
-                r = requests.request(
-                    method='patch',
-                    url=url,
-                    data=json.dumps(data),
-                    auth=auth_ones,
-                    verify=False,
-                    headers={'Content-type': 'application/json'}
-                )
-                if r is not None:
-                    if r.status_code != 200:
-                        rospy.logerr('103 patch/' + r.reason)
-                    else:
-                        rospy.loginfo('{}, {}'.format(url, r.status_code))
-                rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
+                    url = 'http://115.93.143.2:9103/api/stations/{}/'.format(station)
+                    r = requests.request(
+                        method='patch',
+                        url=url,
+                        data=json.dumps(data),
+                        auth=auth_ones,
+                        verify=False,
+                        headers={'Content-type': 'application/json'}
+                    )
+                    if r is not None:
+                        if r.status_code != 200:
+                            rospy.logerr('103 patch/' + r.reason)
+                        else:
+                            rospy.loginfo('{}, {}'.format(url, r.status_code))
+                    rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
 
         except requests.exceptions.RequestException as e:  # Max retries exceeded with
             rospy.logerr('requests {}'.format(e))
@@ -560,7 +562,7 @@ class post_eta_to_django_by_1sec(smach.State):
             data['eta'].append(json.dumps(station_04))
 
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
+            url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(pk)
             r = requests.request(
                 method='patch',
                 url=url,
@@ -1076,7 +1078,7 @@ class get_weather_from_opensite_and_post(smach.State):
                 data['weather_forecast'] = json.dumps(houly)
 
                 pk = garage['site']
-                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
+                url = 'https://test.aspringcloud.com/api/sites/{}/'.format(pk)
                 # print(url)
                 r = requests.request(
                     method='patch',
@@ -1203,7 +1205,7 @@ class get_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/garages'
+            url = 'https://test.aspringcloud.com/api/garages'
             garages = requests.request(
                 method='get',
                 url=url,
@@ -1257,7 +1259,7 @@ class get_dust_from_opensite_and_post(smach.State):
                 data['air_quality'] = json.dumps(ret)
 
                 pk = garage['site']
-                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
+                url = 'https://test.aspringcloud.com/api/sites/{}/'.format(pk)
                 # print(url)
                 r = requests.request(
                     method='patch',
