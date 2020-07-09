@@ -128,15 +128,16 @@ def CalcTotalETA(stationETA, vehi, StationsPos):
             # 차량의 gps 값이 들어오지 않았을 경우, 패스
             if not vehi['lat'] or not vehi['lon']:
                 print("pass!")
-                continue
-            
-            # unicode 'utf-8'로 변환
-            lat_vehi = unicode(vehi['lat']).decode('utf-8').encode('utf-8')
-            lon_vehi = unicode(vehi['lon']).decode('utf-8').encode('utf-8')
+                Relative_Distance = 1
+            else:
+                # unicode 'utf-8'로 변환
+                lat_vehi = unicode(vehi['lat']).decode('utf-8').encode('utf-8')
+                lon_vehi = unicode(vehi['lon']).decode('utf-8').encode('utf-8')
 
-            # euclidean 상대 거리로 계산 시간 가중 계산
+                # euclidean 상대 거리로 계산 시간 가중 계산            
+                Relative_Distance = GPSeuclidean.GeoUtil.get_euclidean_distance(float(lon), float(lat), float(lon_vehi), float(lat_vehi))
+                
             max = GPSeuclidean.GeoUtil.get_euclidean_distance(float(lon), float(lat), float(lon_passed), float(lat_passed))
-            Relative_Distance = GPSeuclidean.GeoUtil.get_euclidean_distance(float(lon), float(lat), float(lon_vehi), float(lat_vehi))
 
             # 다음 스테이션과 차량의 gps가 일치할 경우 >> 값은 0, 연산 에러를 방지하기 위해, 1(분)을 삽입
             if Relative_Distance == 0:
@@ -174,6 +175,7 @@ def Trans_VehiETA_2_StationETA(VehiETA):
 
 # def Sites_Estiamtetime(siteNo, Passed_statiopn, lat, lon):
 def Sites_Estiamtetime(siteNo, StationNo):
+    print("siteNo:",siteNo, "StationNo: ", StationNo)
     global GUNSAN_SQUENCE_List, DAEGU_SQUENCE_list
 
     # 1. 사이트 넘버를 받는다.

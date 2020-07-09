@@ -309,7 +309,7 @@ class get_vehicle_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://test.aspringcloud.com/api/sites'
+            url = 'https://api.aspringcloud.com/api/sites'
             sites = requests.request(
                 method='get',
                 url=url,
@@ -318,7 +318,7 @@ class get_vehicle_site_from_django(smach.State):
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, sites.status_code))
-            url = 'https://test.aspringcloud.com/api/vehicles'
+            url = 'https://api.aspringcloud.com/api/vehicles'
             vehicles = requests.request(
                 method='get',
                 url=url,
@@ -347,7 +347,7 @@ class get_station_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://test.aspringcloud.com/api/stations'
+            url = 'https://api.aspringcloud.com/api/stations'
             stations = requests.request(
                 method='get',
                 url=url,
@@ -425,7 +425,7 @@ class post_event_to_django(smach.State):
             return 'succeeded'
 
         auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-        url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(pk)
+        url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
         r = requests.request(
             method='patch',
             url=url,
@@ -478,7 +478,7 @@ class estiamte_eta_and_post(smach.State):
                     data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
                     data['eta'].append(json.dumps(veta))
                     auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-                    url = 'https://test.aspringcloud.com/api/stations/{}/'.format(station)
+                    url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
                     r = requests.request(
                         method='patch',
                         url=url,
@@ -562,7 +562,7 @@ class post_eta_to_django_by_1sec(smach.State):
             data['eta'].append(json.dumps(station_04))
 
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(pk)
+            url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
             r = requests.request(
                 method='patch',
                 url=url,
@@ -1078,7 +1078,7 @@ class get_weather_from_opensite_and_post(smach.State):
                 data['weather_forecast'] = json.dumps(houly)
 
                 pk = garage['site']
-                url = 'https://test.aspringcloud.com/api/sites/{}/'.format(pk)
+                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
                 # print(url)
                 r = requests.request(
                     method='patch',
@@ -1205,7 +1205,7 @@ class get_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://test.aspringcloud.com/api/garages'
+            url = 'https://api.aspringcloud.com/api/garages'
             garages = requests.request(
                 method='get',
                 url=url,
@@ -1259,7 +1259,7 @@ class get_dust_from_opensite_and_post(smach.State):
                 data['air_quality'] = json.dumps(ret)
 
                 pk = garage['site']
-                url = 'https://test.aspringcloud.com/api/sites/{}/'.format(pk)
+                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
                 # print(url)
                 r = requests.request(
                     method='patch',
