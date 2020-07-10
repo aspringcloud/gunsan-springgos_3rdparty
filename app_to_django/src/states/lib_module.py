@@ -412,7 +412,10 @@ class post_event_to_django(smach.State):
             if how['type'] == 'parking':
                 data['isparked'] = how['value']
             if how['type'] == 'drive':
-                data['drive'] = how['value']
+                if how['value'] == 'auto':
+                    data['drive'] = True
+                else:
+                    data['drive'] = False
             if how['type'] == 'door':
                 data['door'] = how['value']
             if how['type'] == 'message':
@@ -722,12 +725,17 @@ class get_msg_until_sec(smach.State):
                 else:
                     ud.blackboard.message['what'] = 'EVENT'
                     is_ondemand = False
+                    is_message = False
                     is_function_call = False
                     is_function_start = False
                     is_function_complete = False
                     if 'type' in ud.blackboard.message['how']:
                         if ud.blackboard.message['how']['type'] == 'ondemand':
                             is_ondemand = True
+
+                    if 'type' in ud.blackboard.message['how']:
+                        if ud.blackboard.message['how']['type'] == 'message':
+                            is_message = True
 
                     if 'function' in ud.blackboard.message['how']:
                         if ud.blackboard.message['how']['function'] == 'start':
@@ -761,6 +769,10 @@ class get_msg_until_sec(smach.State):
                         새로운 필드 추가
                         '''
                         rospy.loginfo('is_function_complete')
+                        client.sendMessage(json.dumps(ud.blackboard.message))
+
+                    if is_message:
+                        rospy.loginfo('is_message')
                         client.sendMessage(json.dumps(ud.blackboard.message))
 
                     # else: ondemand 이외에는 처리 하지 않는다.
