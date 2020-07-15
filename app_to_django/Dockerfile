@@ -31,6 +31,8 @@ RUN curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
 RUN apt-get install -y nodejs
 RUN curl https://www.npmjs.com/install.sh | sudo sh
 RUN npm install pm2 -g
+# ref https://github.com/keymetrics/pm2-logrotate
+RUN pm2 install pm2-logrotate && pm2 set pm2-logrotate:max_size 1K
 
 #RUN apt-get update \
 #    && apt-get add postgresql-dev gcc python2-dev musl-dev
