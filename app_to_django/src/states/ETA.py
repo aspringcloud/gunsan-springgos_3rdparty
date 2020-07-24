@@ -242,6 +242,27 @@ def Sites_Estiamtetime(siteNo, StationNo):
     else:
         return Trans_VehiETA_2_StationETA(ETA_vehicles)[StationNo]
 
+def ETA_sta2sta(StationIndex, siteIndex):
+    global GUNSAN_SQUENCE_List, DAEGU_SQUENCE_list
+
+    if siteIndex == 1:
+        StationList = GUNSAN_SQUENCE_List
+    elif siteIndex == 2:
+        StationList = DAEGU_SQUENCE_list
+
+    list_STAList = list( StationList )
+    if list_STAList.index(StationIndex) != 0:
+        ordered_STAList = list_STAList[list_STAList.index(StationIndex)+1:] + list_STAList[:list_STAList.index(StationIndex)]
+    else:
+        ordered_STAList = list_STAList[1:]
+
+    sta2sta_ETA = {}
+    sta2sta_ETA.setdefault(StationIndex, {})
+    for index in ordered_STAList:
+        sta2sta_ETA[StationIndex].setdefault( index, )
+        sta2sta_ETA[StationIndex][index] = round(StationList[index] / (10 * 16.7))
+
+    return sta2sta_ETA
 
 if __name__ == '__main__':
     start = time.time()

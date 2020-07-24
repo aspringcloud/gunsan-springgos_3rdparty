@@ -31,7 +31,7 @@ from datetime import datetime
 import xmltodict
 
 # eta
-from .ETA import Sites_Estiamtetime
+from .ETA import Sites_Estiamtetime, ETA_sta2sta
 
 # InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
 # Adding certificate verification is strongly advised.
@@ -481,20 +481,6 @@ class estiamte_eta_and_post(smach.State):
                     data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
                     data['eta'].append(json.dumps(veta))
                     auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-                    url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
-                    r = requests.request(
-                        method='patch',
-                        url=url,
-                        data=json.dumps(data),
-                        auth=auth_ones,
-                        verify=False,
-                        headers={'Content-type': 'application/json'}
-                    )
-                    if r is not None:
-                        if r.status_code != 200:
-                            rospy.logerr('patch/' + r.reason)
-                        else:
-                            rospy.loginfo('{}, {}'.format(url, r.status_code))
 
                     url = 'http://115.93.143.2:9103/api/stations/{}/'.format(station)
                     r = requests.request(
@@ -511,6 +497,27 @@ class estiamte_eta_and_post(smach.State):
                         else:
                             rospy.loginfo('{}, {}'.format(url, r.status_code))
                     rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
+
+                    # Station 2 Station 서버 구성.
+                    ceta = ETA_sta2sta(station, gsiteindex)
+                    data['stat2sta'] = []  
+                    data['stat2sta'].append(json.dumps(ceta))
+                    url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
+                    r = requests.request(
+                        method='patch',
+                        url=url,
+                        data=json.dumps(data),
+                        auth=auth_ones,
+                        verify=False,
+                        headers={'Content-type': 'application/json'}
+                    )
+                    if r is not None:
+                        if r.status_code != 200:
+                            rospy.logerr('patch/' + r.reason)
+                        else:
+                            rospy.loginfo('{}, {}'.format(url, r.status_code))
+
+                    
 
         except requests.exceptions.RequestException as e:  # Max retries exceeded with
             rospy.logerr('requests {}'.format(e))
