@@ -467,7 +467,7 @@ class estiamte_eta_and_post(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
-        self.gstations = {1:[9,10,11,12,13], 2:[1, 2, 3, 4]}
+        self.gstations = {1:[9,10,11,12,13, 18, 19], 2:[1, 2, 3, 4]}
         self.gsite_id = [1, 2]
     def execute(self, ud):
         data = {}
