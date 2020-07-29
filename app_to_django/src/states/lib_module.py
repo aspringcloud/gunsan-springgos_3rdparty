@@ -328,12 +328,26 @@ class get_vehicle_site_from_django(smach.State):
             )
             rospy.loginfo('{}, {}'.format(url, vehicles.status_code))
 
+            # [chang-gi] 20.07.29 - 안전 요원의 도착 예정시간 취득을 위한 추가.
+            url = 'https://test.aspringcloud.com/api/stations'
+            stations = requests.request(
+                method='get',
+                url=url,
+                auth=auth_ones,
+                verify=None,
+                headers={'Content-type': 'application/json'}
+            )
+            rospy.loginfo('{}, {}'.format(url, stations.status_code))
+
             with open('/ws/src/app_to_django/vehicles.json', 'w') as json_file:
                 json.dump(vehicles.json(), json_file)
 
             
             with open('/ws/src/app_to_django/sites.json', 'w') as json_file:
                 json.dump(sites.json(), json_file)
+
+            with open('/ws/src/app_to_django/stations.json', 'w') as json_file:
+                json.dump(stations.json(), json_file)
 
             
         except requests.exceptions.RequestException as e:
@@ -690,10 +704,17 @@ class get_msg_until_sec(smach.State):
 
         vehicles = None
         sites = None
+        stations = None
+
         with open('/ws/src/app_to_django/vehicles.json') as json_file:
             vehicles = json.load(json_file)
         with open('/ws/src/app_to_django/sites.json') as json_file:
             sites = json.load(json_file)
+
+        # [chang-gi] 20.07.29 - 안전 요원의 도착 예정시간 취득을 위한 추가.
+        with open('/ws/src/app_to_django/stations.json') as json_file:
+            stations = json.load(json_file)
+
         # 7월 28일 - Socket 문제 해결을 위한 변경.
         #sites = sites['results']
 
@@ -772,12 +793,12 @@ class get_msg_until_sec(smach.State):
                             is_function_cancelcall = True
 
                     #테스트용 코드 작성
-                    # rospy.loginfo('is_ondemand>>'+str(is_ondemand))
-                    # rospy.loginfo('is_message>>'+str(is_message))
-                    # rospy.loginfo('is_function_call>>'+str(is_function_call))
-                    # rospy.loginfo('is_function_start>>'+str(is_function_start))
-                    # rospy.loginfo('is_function_complete>>'+str(is_function_complete))
-                    # rospy.loginfo('is_function_cancelcall>>'+str(is_function_cancelcall))
+                    rospy.loginfo('is_ondemand>>'+str(is_ondemand))
+                    rospy.loginfo('is_message>>'+str(is_message))
+                    rospy.loginfo('is_function_call>>'+str(is_function_call))
+                    rospy.loginfo('is_function_start>>'+str(is_function_start))
+                    rospy.loginfo('is_function_complete>>'+str(is_function_complete))
+                    rospy.loginfo('is_function_cancelcall>>'+str(is_function_cancelcall))
                     
                     if is_ondemand and is_function_start:
                         '''
@@ -791,7 +812,27 @@ class get_msg_until_sec(smach.State):
                         '''
                         새로운 필드 추가
                         '''
-                        rospy.loginfo('is_function_call')
+                        # [chang-gi] 20.07.29 - 안전 요원의 도착 예정시간 취득을 위한 추가.
+                        # current_station_eta : 현재 정류장까지 오는데 걸리는 시간
+                        # target_station_eta : 목적지 정류장까지 오는데 걸리는 시간.
+
+                        for station_index in stations:
+                            # current_station_eta 구성
+                            current_station_id = str(ud.blackboard.message['how']['current_station_id'])
+
+                            if isinstance(station_index['id'], int):
+                                station_index['id'] = str(station_index['id'])
+
+                            # Stations의 id가 패킷의 출발 station의 id와 같을 경우. ==> 해당 site의 모든 차량에 대한 ETA 정보 송신
+                            if station_index['id'] == current_station_id:
+                                ud.blackboard.message['how'].update({'current_station_eta': station_index['eta']})
+
+                                # target_station_eta 구성
+                                stat2sta = eval(station_index['stat2sta'][0])
+                                target_station_id = str(ud.blackboard.message['how']['target_station_id'])
+
+                                ud.blackboard.message['how'].update({'target_station_eta': stat2sta[current_station_id][target_station_id]})
+                                                        
                         # tasio에서는 어떤 차량인지 모른다.
                         ud.blackboard.message['how'].update({'vehicle_id': 4})
                         client.sendMessage(json.dumps(ud.blackboard.message))
