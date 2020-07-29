@@ -31,7 +31,7 @@ from datetime import datetime
 import xmltodict
 
 # eta
-from .ETA import Sites_Estiamtetime
+from .ETA import Sites_Estiamtetime, ETA_sta2sta
 
 # InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
 # Adding certificate verification is strongly advised.
@@ -485,6 +485,12 @@ class estiamte_eta_and_post(smach.State):
                     #     print(station, v_id, eta)
                     data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
                     data['eta'].append(json.dumps(veta))
+
+                    # Station 2 Station 서버 구성.
+                    ceta = ETA_sta2sta(station, gsiteindex)
+                    data['stat2sta'] = []  
+                    data['stat2sta'].append(json.dumps(ceta))
+
                     auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
                     url = 'https://test.aspringcloud.com/api/stations/{}/'.format(station)
                     r = requests.request(
@@ -688,6 +694,7 @@ class get_msg_until_sec(smach.State):
             vehicles = json.load(json_file)
         with open('/ws/src/app_to_django/sites.json') as json_file:
             sites = json.load(json_file)
+        # 7월 28일 - Socket 문제 해결을 위한 변경.
         #sites = sites['results']
 
         if 'what' in ud.blackboard.message:
@@ -704,7 +711,7 @@ class get_msg_until_sec(smach.State):
                     if isinstance(vehicle['id'], str):
                         vehicle['id'] = int(vehicle['id'])
                         
-                    rospy.logerr("vehicle['site'] == site['id']{}/{}".format(vehicle['id'], ud.blackboard.message['how']['vehicle_id']))
+                    # rospy.logerr("vehicle['site'] == site['id']{}/{}".format(vehicle['id'], ud.blackboard.message['how']['vehicle_id']))
                     if vehicle['id'] == ud.blackboard.message['how']['vehicle_id']:
                         for site in sites:
                             if isinstance(vehicle['site'], str):
@@ -721,7 +728,7 @@ class get_msg_until_sec(smach.State):
                         ud.blackboard.message['when'] = time.time()
                         ud.blackboard.message['who'] = 'springgos_sejong_1'
                         ud.blackboard.message['where'] = 'sejong_datahub'
-                        rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                        # rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
                         is_validated = True
                         break
 
@@ -730,7 +737,7 @@ class get_msg_until_sec(smach.State):
                 if ud.blackboard.client == client:
                     ud.blackboard.message['what'] = 'RESP'
                     client.sendMessage(json.dumps(ud.blackboard.message))
-                    rospy.logdebug("what='RESP'==>{}".format(json.dumps(ud.blackboard.message, indent=4, sort_keys=True)))
+                    # rospy.logdebug("what='RESP'==>{}".format(json.dumps(ud.blackboard.message, indent=4, sort_keys=True)))
                 else:
                     ud.blackboard.message['what'] = 'EVENT'
 
@@ -765,12 +772,12 @@ class get_msg_until_sec(smach.State):
                             is_function_cancelcall = True
 
                     #테스트용 코드 작성
-                    rospy.loginfo('is_ondemand>>'+str(is_ondemand))
-                    rospy.loginfo('is_message>>'+str(is_message))
-                    rospy.loginfo('is_function_call>>'+str(is_function_call))
-                    rospy.loginfo('is_function_start>>'+str(is_function_start))
-                    rospy.loginfo('is_function_complete>>'+str(is_function_complete))
-                    rospy.loginfo('is_function_cancelcall>>'+str(is_function_cancelcall))
+                    # rospy.loginfo('is_ondemand>>'+str(is_ondemand))
+                    # rospy.loginfo('is_message>>'+str(is_message))
+                    # rospy.loginfo('is_function_call>>'+str(is_function_call))
+                    # rospy.loginfo('is_function_start>>'+str(is_function_start))
+                    # rospy.loginfo('is_function_complete>>'+str(is_function_complete))
+                    # rospy.loginfo('is_function_cancelcall>>'+str(is_function_cancelcall))
                     
                     if is_ondemand and is_function_start:
                         '''
