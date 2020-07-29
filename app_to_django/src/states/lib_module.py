@@ -31,7 +31,7 @@ from datetime import datetime
 import xmltodict
 
 # eta
-from .ETA import Sites_Estiamtetime
+from .ETA import Sites_Estiamtetime, ETA_sta2sta
 
 # InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
 # Adding certificate verification is strongly advised.
@@ -125,7 +125,7 @@ app_to_django    | }
     how: {
         type: ondemand
         vehicle_id:
-        command: start
+        command: go
     }
     safe -> server
     who: [safe]
@@ -133,7 +133,7 @@ app_to_django    | }
     how: {
         type: ondemand
         vehicle_id:
-        command: complete
+        command: arrived
     }
     server -> safe
     who: [tasio, server]
@@ -153,7 +153,7 @@ app_to_django    | }
         vehicle_id:
         vehicle_mid:
         site:
-        command: start
+        command: go
     }
     server -> web[x]
     who: [safe, server]
@@ -163,7 +163,7 @@ app_to_django    | }
         vehicle_id:
         vehicle_mid:
         site:
-        command: start
+        command: go
     }
     server -> tasio
     who: [safe, server]
@@ -173,7 +173,7 @@ app_to_django    | }
         vehicle_id:
         vehicle_mid:
         site:
-        command: complete
+        command: arrived
     }
     server -> web[x]
     who: [safe, server]
@@ -183,7 +183,7 @@ app_to_django    | }
         vehicle_id:
         vehicle_mid:
         site:
-        command: complete
+        command: arrived
     }
 
     server -> connected client
@@ -309,7 +309,7 @@ class get_vehicle_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/sites'
+            url = 'https://test.aspringcloud.com/api/sites'
             sites = requests.request(
                 method='get',
                 url=url,
@@ -318,7 +318,7 @@ class get_vehicle_site_from_django(smach.State):
                 headers={'Content-type': 'application/json'}
             )
             rospy.loginfo('{}, {}'.format(url, sites.status_code))
-            url = 'https://api.aspringcloud.com/api/vehicles'
+            url = 'https://test.aspringcloud.com/api/vehicles'
             vehicles = requests.request(
                 method='get',
                 url=url,
@@ -330,8 +330,12 @@ class get_vehicle_site_from_django(smach.State):
 
             with open('/ws/src/app_to_django/vehicles.json', 'w') as json_file:
                 json.dump(vehicles.json(), json_file)
+
+            
             with open('/ws/src/app_to_django/sites.json', 'w') as json_file:
                 json.dump(sites.json(), json_file)
+
+            
         except requests.exceptions.RequestException as e:
             rospy.logerr('requests {}'.format(e))
             return 'aborted'
@@ -347,7 +351,7 @@ class get_station_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/stations'
+            url = 'https://test.aspringcloud.com/api/stations'
             stations = requests.request(
                 method='get',
                 url=url,
@@ -399,6 +403,7 @@ class post_event_to_django(smach.State):
 
     def execute(self, ud):
         how = ud.blackboard.message['how']
+        rospy.loginfo('{}, {}'.format(how, ud.blackboard.message))
         data = {}
         pk = None
         if 'vehicle_id' in how:
@@ -428,7 +433,7 @@ class post_event_to_django(smach.State):
             return 'succeeded'
 
         auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-        url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
+        url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(pk)
         r = requests.request(
             method='patch',
             url=url,
@@ -480,8 +485,14 @@ class estiamte_eta_and_post(smach.State):
                     #     print(station, v_id, eta)
                     data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
                     data['eta'].append(json.dumps(veta))
+
+                    # Station 2 Station 서버 구성.
+                    ceta = ETA_sta2sta(station, gsiteindex)
+                    data['stat2sta'] = []  
+                    data['stat2sta'].append(json.dumps(ceta))
+
                     auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-                    url = 'https://api.aspringcloud.com/api/stations/{}/'.format(station)
+                    url = 'https://test.aspringcloud.com/api/stations/{}/'.format(station)
                     r = requests.request(
                         method='patch',
                         url=url,
@@ -565,7 +576,7 @@ class post_eta_to_django_by_1sec(smach.State):
             data['eta'].append(json.dumps(station_04))
 
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/vehicles/{}/'.format(pk)
+            url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(pk)
             r = requests.request(
                 method='patch',
                 url=url,
@@ -643,7 +654,7 @@ class get_msg_until_sec(smach.State):
                 # It raises Queue.Empty if empty.
                 ud.blackboard.client, kind, ud.blackboard.message = self.queue.get(False)
                 ud.blackboard.message = eval(ud.blackboard.message)  # unicode to dictionary
-                rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                rospy.logdebug("queue[after]=>"+json.dumps(ud.blackboard.message, indent=4, sort_keys=True)) 
             except Queue.Empty:
                 kind = None
             except KeyError as e:
@@ -683,7 +694,9 @@ class get_msg_until_sec(smach.State):
             vehicles = json.load(json_file)
         with open('/ws/src/app_to_django/sites.json') as json_file:
             sites = json.load(json_file)
-        sites = sites['results']
+        # 7월 28일 - Socket 문제 해결을 위한 변경.
+        #sites = sites['results']
+
         if 'what' in ud.blackboard.message:
             if ud.blackboard.message['what'] != 'REQ' and ud.blackboard.message['what'] != 'EVENT':
                 rospy.loginfo('REQ or EVENT or PING {}'.format(json.dumps(ud.blackboard.message, indent=4, sort_keys=True)))
@@ -697,6 +710,8 @@ class get_msg_until_sec(smach.State):
                         ud.blackboard.message['how']['vehicle_id'] = int(ud.blackboard.message['how']['vehicle_id'])
                     if isinstance(vehicle['id'], str):
                         vehicle['id'] = int(vehicle['id'])
+                        
+                    # rospy.logerr("vehicle['site'] == site['id']{}/{}".format(vehicle['id'], ud.blackboard.message['how']['vehicle_id']))
                     if vehicle['id'] == ud.blackboard.message['how']['vehicle_id']:
                         for site in sites:
                             if isinstance(vehicle['site'], str):
@@ -706,6 +721,7 @@ class get_msg_until_sec(smach.State):
                                 site['id'] = int(site['id'])
 
                             if vehicle['site'] == site['id']:
+                                rospy.logerr("vehicle['site'] == site['id']")
                                 ud.blackboard.message['how'].update({'site_id': site['id']})
                                 ud.blackboard.message['how'].update({'vehicle_mid': vehicle['mid']})
                                 break
@@ -721,14 +737,16 @@ class get_msg_until_sec(smach.State):
                 if ud.blackboard.client == client:
                     ud.blackboard.message['what'] = 'RESP'
                     client.sendMessage(json.dumps(ud.blackboard.message))
-                    rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                    # rospy.logdebug("what='RESP'==>{}".format(json.dumps(ud.blackboard.message, indent=4, sort_keys=True)))
                 else:
                     ud.blackboard.message['what'] = 'EVENT'
+
                     is_ondemand = False
                     is_message = False
                     is_function_call = False
                     is_function_start = False
                     is_function_complete = False
+                    is_function_cancelcall = False
                     if 'type' in ud.blackboard.message['how']:
                         if ud.blackboard.message['how']['type'] == 'ondemand':
                             is_ondemand = True
@@ -738,7 +756,7 @@ class get_msg_until_sec(smach.State):
                             is_message = True
 
                     if 'function' in ud.blackboard.message['how']:
-                        if ud.blackboard.message['how']['function'] == 'start':
+                        if ud.blackboard.message['how']['function'] == 'go':
                             is_function_start = True
                     
                     if 'function' in ud.blackboard.message['how']:
@@ -746,9 +764,21 @@ class get_msg_until_sec(smach.State):
                             is_function_call = True
                     
                     if 'function' in ud.blackboard.message['how']:
-                        if ud.blackboard.message['how']['function'] == 'complete':
+                        if ud.blackboard.message['how']['function'] == 'arrived':
                             is_function_complete = True
 
+                    if 'function' in ud.blackboard.message['how']:
+                        if ud.blackboard.message['how']['function'] == 'cancel_call':
+                            is_function_cancelcall = True
+
+                    #테스트용 코드 작성
+                    # rospy.loginfo('is_ondemand>>'+str(is_ondemand))
+                    # rospy.loginfo('is_message>>'+str(is_message))
+                    # rospy.loginfo('is_function_call>>'+str(is_function_call))
+                    # rospy.loginfo('is_function_start>>'+str(is_function_start))
+                    # rospy.loginfo('is_function_complete>>'+str(is_function_complete))
+                    # rospy.loginfo('is_function_cancelcall>>'+str(is_function_cancelcall))
+                    
                     if is_ondemand and is_function_start:
                         '''
                         예상도착시간, 예상이동시간
@@ -762,6 +792,16 @@ class get_msg_until_sec(smach.State):
                         새로운 필드 추가
                         '''
                         rospy.loginfo('is_function_call')
+                        # tasio에서는 어떤 차량인지 모른다.
+                        ud.blackboard.message['how'].update({'vehicle_id': 4})
+                        client.sendMessage(json.dumps(ud.blackboard.message))
+
+                    if is_ondemand and is_function_cancelcall:
+                        '''
+                        add new field.
+                        '''
+                        rospy.loginfo('is_function_cancelcall')
+                        ud.blackboard.message['how'].update({'vehicle_id': 4})
                         client.sendMessage(json.dumps(ud.blackboard.message))
 
                     if is_ondemand and is_function_complete:
@@ -773,12 +813,14 @@ class get_msg_until_sec(smach.State):
 
                     if is_message:
                         rospy.loginfo('is_message')
+                        # print(type(ud.blackboard.message["how"]["value"]))
+                        # ud.blackboard.message["how"]["value"] = "안녕하세요"
                         client.sendMessage(json.dumps(ud.blackboard.message))
 
                     # else: ondemand 이외에는 처리 하지 않는다.
                     #     client.sendMessage(json.dumps(ud.blackboard.message))
 
-                    rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                    rospy.logdebug("==> "+json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
             return 'succeeded'
 
         return 'timeout'
@@ -1090,7 +1132,7 @@ class get_weather_from_opensite_and_post(smach.State):
                 data['weather_forecast'] = json.dumps(houly)
 
                 pk = garage['site']
-                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
+                url = 'https://test.aspringcloud.com/api/sites/{}/'.format(pk)
                 # print(url)
                 r = requests.request(
                     method='patch',
@@ -1217,7 +1259,7 @@ class get_site_from_django(smach.State):
     def execute(self, ud):
         try:
             auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-            url = 'https://api.aspringcloud.com/api/garages'
+            url = 'https://test.aspringcloud.com/api/garages'
             garages = requests.request(
                 method='get',
                 url=url,
@@ -1271,7 +1313,7 @@ class get_dust_from_opensite_and_post(smach.State):
                 data['air_quality'] = json.dumps(ret)
 
                 pk = garage['site']
-                url = 'https://api.aspringcloud.com/api/sites/{}/'.format(pk)
+                url = 'https://test.aspringcloud.com/api/sites/{}/'.format(pk)
                 # print(url)
                 r = requests.request(
                     method='patch',
