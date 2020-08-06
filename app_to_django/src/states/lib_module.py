@@ -31,7 +31,7 @@ from datetime import datetime
 import xmltodict
 
 # eta
-from .ETA import Sites_Estiamtetime, ETA_sta2sta
+from .ETA import CalcETA
 
 # InsecureRequestWarning: Unverified HTTPS request is being made to host '115.93.143.2'.
 # Adding certificate verification is strongly advised.
@@ -486,56 +486,54 @@ class estiamte_eta_and_post(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
-        self.gstations = {1:[9,10,11,12,13, 18, 19], 2:[1, 2, 3, 4]}
-        self.gsite_id = [1, 2]
+        self.sta2Sta_ETA = {}
+        self.Vehicle_ETA = {}
     def execute(self, ud):
         data = {}
         try:
+            sta2Sta_ETA, Vehicle_ETA = CalcETA()
+            self.sta2Sta_ETA = sta2Sta_ETA
+            self.Vehicle_ETA = Vehicle_ETA
             #대구도 작동하게 하기 위한 변경
-            for gsiteindex in self.gsite_id:
-                for station in self.gstations[gsiteindex]:
-                    veta = Sites_Estiamtetime(gsiteindex, station)
-                    # for v_id, eta in veta.items():
-                    #     print(station, v_id, eta)
-                    data['eta'] = []  # veta가 list로 되어야 하는거아닌가?
-                    data['eta'].append(json.dumps(veta))
+            for stationIndex in self.Vehicle_ETA:
+                data['eta']=[]
+                data['eta'].append(json.dumps(self.Vehicle_ETA[stationIndex]))
+                data['stat2sta']=[]
+                data['stat2sta'].append(json.dumps(self.sta2Sta_ETA[stationIndex][0]))
 
-                    # Station 2 Station 서버 구성.
-                    ceta = ETA_sta2sta(station, gsiteindex)
-                    data['stat2sta'] = []  
-                    data['stat2sta'].append(json.dumps(ceta))
+                auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+                # Test Django에 데이터 삽입
+                url = 'https://test.aspringcloud.com/api/stations/{}/'.format(stationIndex)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
 
-                    auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
-                    url = 'https://test.aspringcloud.com/api/stations/{}/'.format(station)
-                    r = requests.request(
-                        method='patch',
-                        url=url,
-                        data=json.dumps(data),
-                        auth=auth_ones,
-                        verify=False,
-                        headers={'Content-type': 'application/json'}
-                    )
-                    if r is not None:
-                        if r.status_code != 200:
-                            rospy.logerr('patch/' + r.reason)
-                        else:
-                            rospy.loginfo('{}, {}'.format(url, r.status_code))
-
-                    url = 'http://115.93.143.2:9103/api/stations/{}/'.format(station)
-                    r = requests.request(
-                        method='patch',
-                        url=url,
-                        data=json.dumps(data),
-                        auth=auth_ones,
-                        verify=False,
-                        headers={'Content-type': 'application/json'}
-                    )
-                    if r is not None:
-                        if r.status_code != 200:
-                            rospy.logerr('103 patch/' + r.reason)
-                        else:
-                            rospy.loginfo('{}, {}'.format(url, r.status_code))
-                    rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
+                # api Server에 데이터 삽입
+                url = 'http://115.93.143.2:9103/api/stations/{}/'.format(stationIndex)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('103 patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+                rospy.loginfo(json.dumps(data, indent=4, sort_keys=True))
 
         except requests.exceptions.RequestException as e:  # Max retries exceeded with
             rospy.logerr('requests {}'.format(e))
@@ -815,7 +813,7 @@ class get_msg_until_sec(smach.State):
                         # [chang-gi] 20.07.29 - 안전 요원의 도착 예정시간 취득을 위한 추가.
                         # current_station_eta : 현재 정류장까지 오는데 걸리는 시간
                         # target_station_eta : 목적지 정류장까지 오는데 걸리는 시간.
-
+                        eta=None
                         for station_index in stations:
                             # current_station_eta 구성
                             current_station_id = str(ud.blackboard.message['how']['current_station_id'])
@@ -832,36 +830,52 @@ class get_msg_until_sec(smach.State):
                                 target_station_id = str(ud.blackboard.message['how']['target_station_id'])
 
                                 ud.blackboard.message['how'].update({'target_station_eta': stat2sta[current_station_id][target_station_id]})
-                                                        
-                        # tasio에서는 어떤 차량인지 모른다.
-                        ud.blackboard.message['how'].update({'vehicle_id': 4})
-                        client.sendMessage(json.dumps(ud.blackboard.message))
+                                
+                                # tasio에서는 어떤 차량인지 모른다.
+                                # site 내의 운영중인 차량(ETA 데이터를 기준으로 송신 내역 송부)
+                                # 동일 사이트의 정보를 탐색 : ETA의 키 값이 필요한 것이므로, 몇번 station인지는 관여하지 않음.
+                                eta = eval(station_index['eta'][0])
+                                break
+
+                        ud.blackboard.message['how'].update({'vehicle_id': ""})
+                        #client.sendMessage(json.dumps(ud.blackboard.message))
+                        rospy.logdebug("is_function_call ==>")
 
                     if is_ondemand and is_function_cancelcall:
                         '''
                         add new field.
                         '''
                         rospy.loginfo('is_function_cancelcall')
-                        ud.blackboard.message['how'].update({'vehicle_id': 4})
-                        client.sendMessage(json.dumps(ud.blackboard.message))
+
+                        #ud.blackboard.message['how'].update({'vehicle_id': ""})
+                        #client.sendMessage(json.dumps(ud.blackboard.message))
+                        rospy.logdebug("is_function_cancelcall ==> ")
+                                    
+
+                        # ud.blackboard.message['how'].update({'vehicle_id': 4})
+                        # client.sendMessage(json.dumps(ud.blackboard.message))
 
                     if is_ondemand and is_function_complete:
                         '''
                         새로운 필드 추가
                         '''
                         rospy.loginfo('is_function_complete')
-                        client.sendMessage(json.dumps(ud.blackboard.message))
+                        #client.sendMessage(json.dumps(ud.blackboard.message))
 
                     if is_message:
                         rospy.loginfo('is_message')
                         # print(type(ud.blackboard.message["how"]["value"]))
                         # ud.blackboard.message["how"]["value"] = "안녕하세요"
-                        client.sendMessage(json.dumps(ud.blackboard.message))
+                        #client.sendMessage(json.dumps(ud.blackboard.message))
+                        rospy.logdebug("==> "+json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
 
                     # else: ondemand 이외에는 처리 하지 않는다.
                     #     client.sendMessage(json.dumps(ud.blackboard.message))
 
-                    rospy.logdebug("==> "+json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                    #rospy.logdebug("==> "+json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+                client.sendMessage(json.dumps(ud.blackboard.message))
+                rospy.logdebug("==> "+json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
+
             return 'succeeded'
 
         return 'timeout'
@@ -874,6 +888,21 @@ class check_10hour(smach.State):
                              output_keys=['blackboard'])
 
         self.timeout = 36000
+        self.start_time = time.time()
+
+    def execute(self, ud):
+        if time.time() - self.start_time > self.timeout:
+            self.start_time = time.time()
+            return 'timeout'
+        return 'succeeded'
+
+class check_30sec(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
+                             input_keys=['blackboard'],
+                             output_keys=['blackboard'])
+
+        self.timeout = 30
         self.start_time = time.time()
 
     def execute(self, ud):
@@ -994,7 +1023,7 @@ class Rosbag(smach.State):
     def execute(self, ud):
         package = 'rosbag'
         executable = 'record'
-        timer = rospy.Timer(rospy.Duration(1), self.diagnosticTimerCallback)
+        timer = rospy.Timer(rospy.Duration(1), self.diagnosticTimerCallback) 
         try:
             file = os.path.dirname(os.path.realpath(__file__)) + '/tmp.bag'
             args = "--duration={0}s --bz2 -a -b 0 -O {1}".format(str(self.duration), file)
