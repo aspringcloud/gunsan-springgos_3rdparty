@@ -176,7 +176,7 @@ def main(config):
         })
         smach.StateMachine.add('post', sp.post_event_to_django(), {'succeeded': 'check'})
         # 무조건 거치고, 10시간 되면 vehicle, site DB에서 가져오고
-        smach.StateMachine.add('check', sp.check_10hour(), 
+        smach.StateMachine.add('check', sp.check_30sec(), 
         {
             'succeeded': 'ping',        # 10시간 초과 안되면 ping으로
             'timeout': 'start'          # 10시간 초과하면 API 호출
