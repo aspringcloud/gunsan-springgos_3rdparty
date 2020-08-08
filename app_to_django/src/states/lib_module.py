@@ -427,14 +427,18 @@ class post_event_to_django(smach.State):
             if how['type'] == 'passenger':
                 data['passenger'] = how['current_passenger']
             if how['type'] == 'power':
-                pass
+                if how['value'] == "off":
+                    data['drive'] = False
+                elif how['value'] == 'on':
+                    data['drive'] = True
+
             if how['type'] == 'parking':
                 data['isparked'] = how['value']
             if how['type'] == 'drive':
                 if how['value'] == 'auto':
-                    data['drive'] = True
+                    data['drive_mode'] = 1
                 else:
-                    data['drive'] = False
+                    data['drive_mode'] = 2
             if how['type'] == 'door':
                 data['door'] = how['value']
             if how['type'] == 'message':
@@ -499,11 +503,26 @@ class estiamte_eta_and_post(smach.State):
                 data['eta']=[]
                 data['eta'].append(json.dumps(self.Vehicle_ETA[stationIndex]))
                 data['stat2sta']=[]
-                data['stat2sta'].append(json.dumps(self.sta2Sta_ETA[stationIndex][0]))
+                data['stat2sta'].append(json.dumps({stationIndex:self.sta2Sta_ETA[stationIndex][0]}))
 
                 auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
                 # Test Django에 데이터 삽입
                 url = 'https://test.aspringcloud.com/api/stations/{}/'.format(stationIndex)
+                r = requests.request(
+                    method='patch',
+                    url=url,
+                    data=json.dumps(data),
+                    auth=auth_ones,
+                    verify=False,
+                    headers={'Content-type': 'application/json'}
+                )
+                if r is not None:
+                    if r.status_code != 200:
+                        rospy.logerr('patch/' + r.reason)
+                    else:
+                        rospy.loginfo('{}, {}'.format(url, r.status_code))
+
+                url = 'https://api.aspringcloud.com/api/stations/{}/'.format(stationIndex)
                 r = requests.request(
                     method='patch',
                     url=url,
