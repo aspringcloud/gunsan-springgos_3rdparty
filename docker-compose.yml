@@ -67,6 +67,16 @@ services:
       rosnet:
         ipv4_address: 172.18.0.102
 
+  nginx:
+    restart: unless-stopped
+    image: nginx:latest
+    build: ./nginx
+    ports:
+      - 11511:9102
+    depends_on:
+      - app_to_django
+    volumes:
+      - ${PWD}/nginx:/ws/src/nginx
 volumes:
   roslogs:
 
@@ -77,3 +87,4 @@ networks:
       driver: default
       config:
       - subnet: 172.18.0.0/24
+
