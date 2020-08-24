@@ -44,7 +44,7 @@ RUN git clone -b master git://github.com/kennethreitz/requests.git && \
     python setup.py install && \
     rm -rf /requests
 # 웹소켓 관련 문제로 인한 별도 소켓 내용 작성
-RUN git clone -b master https://github.com/co5808/simple-websocket-server.git \
+RUN git clone -b master https://github.com/dpallot/simple-websocket-server.git \
     && cd simple-websocket-server \
     && python setup.py install \
     && rm -rf simple-websocket-server
