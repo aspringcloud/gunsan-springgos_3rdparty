@@ -15,6 +15,9 @@ services:
     environment:
       - "ROS_IP=172.18.0.100"
 
+
+
+
   app_to_django:
     build: ./app_to_django
     container_name: app_to_django
@@ -35,12 +38,35 @@ services:
         chmod +x /ws/src/app_to_django/src/weather.py
         pm2-runtime /ws/src/app_to_django/pm2.json
     restart: always
+    expose: 
+      - 9103
     ports:
-      - 11411:9103
+      - "11411:9103"
     networks:
+      websocket_net:
+        aliases:
+          - websocket
       rosnet:
         ipv4_address: 172.18.0.101
   
+  
+  nginx:
+    container_name: nginx_websocket
+    restart: unless-stopped
+    image: nginx-alpine
+    build: ./nginx
+    ports:
+      - "11511:9102"
+    depends_on:
+      - app_to_django
+    volumes:
+      - ${PWD}/nginx:/ws/src/nginx
+    restart: always
+    # links: 
+    #   - "app_to_django:websocket"
+    networks:
+      - websocket_net
+
   graph:
     build: ./graph
     container_name: graph
@@ -67,13 +93,18 @@ services:
       rosnet:
         ipv4_address: 172.18.0.102
 
+
 volumes:
   roslogs:
 
 networks:
+  websocket_net:
+    driver: bridge
+
   rosnet:
     driver: bridge
     ipam:
       driver: default
       config:
       - subnet: 172.18.0.0/24
+
