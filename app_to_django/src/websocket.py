@@ -96,7 +96,7 @@ class WebServer:
     def start(self):
         # self.server = SimpleSSLWebSocketServer('0.0.0.0', 9103, Connection,
         #    '/ws/src/app_to_django/cert.pem', '/ws/src/app_to_django/key.pem', ssl.PROTOCOL_TLSv1)
-        self.server = SimpleWebSocketServer('0.0.0.0', 9103, Connection)
+        self.server = SimpleWebSocketServer('0.0.0.0', 9103, Connection, selectInterval=0)
         self.server_thread = Thread(target=self.server.serveforever)
         self.server_thread.start()
 

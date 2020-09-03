@@ -425,11 +425,11 @@ class post_event_to_django(smach.State):
 
         if 'type' in how:
             if how['type'] == 'passenger':
-                data['passenger'] = how['current_passenger']
+                data['passenger'] = int( how['current_passenger'] - 1 )
             if how['type'] == 'power':
-                if how['value'] == "off":
+                if how['value'] == "false":
                     data['drive'] = False
-                elif how['value'] == 'on':
+                elif how['value'] == 'true':
                     data['drive'] = True
 
             if how['type'] == 'parking':
@@ -437,8 +437,9 @@ class post_event_to_django(smach.State):
             if how['type'] == 'drive':
                 if how['value'] == 'auto':
                     data['drive_mode'] = 1
-                else:
+                elif how['value'] == 'manual':
                     data['drive_mode'] = 2
+                    
             if how['type'] == 'door':
                 data['door'] = how['value']
             if how['type'] == 'message':
@@ -447,6 +448,7 @@ class post_event_to_django(smach.State):
                 data['passed_station'] = how['value']
 
         if not data:
+            rospy.loginfo('{}'.format(data))
             rospy.logerr('empty data to post')
             return 'succeeded'
 
