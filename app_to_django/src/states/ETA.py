@@ -140,6 +140,7 @@ def ETA_sta2sta(StationInfo):
             EstimateTime = 0
             # 각 스테이션별 접근 수행
             temp_dict = {}
+            station_sequen = []
             for nextStationIndex in SequecnIndexList:
                 nextStation = StationInfo[SiteIndex][nextStationIndex]['station_Id']
                 # 10은 10km/h 를 의미하며, 이는 저속 운행 시의 시간을 나타냄
@@ -149,8 +150,9 @@ def ETA_sta2sta(StationInfo):
                 else:
                     EstimateTime += temp
                 temp_dict.setdefault(nextStation, EstimateTime)
+                station_sequen.append(nextStation)
 
-            sta2Sta_ETA[currentStation] = [temp_dict, SequecnIndexList ]
+            sta2Sta_ETA[currentStation] = [temp_dict, station_sequen ]
 
     return sta2Sta_ETA
 
@@ -200,7 +202,7 @@ def EachVehicleETA(VehicleList, Site2Vehicles, sta2staETA, StationInfo, StationG
             if start_stationNo is None or start_stationNo == '':
                 continue
 
-            NextStation = list(sta2staETA[start_stationNo][0].keys())[0]
+            NextStation = sta2staETA[start_stationNo][1][0]
             VehiclGPS = {'lat':VehicleList[VehicleIndex]['lat'], 'lon':VehicleList[VehicleIndex]['lon']}
             weight = CalcGPSEuclidean(StationGPS[start_stationNo], StationGPS[NextStation], VehiclGPS)
 
@@ -232,3 +234,8 @@ def CalcETA():
     # 각 정류장별 이동 예상 시간 계산
     Vehicle_ETA = EachVehicleETA(VehicleList, Site2Vehicles, sta2Sta_ETA, StationInfo, StationGPS)
     return sta2Sta_ETA, Vehicle_ETA
+
+if __name__ == "__main__":
+    sta2Sta_ETA, Vehicle_ETA = CalcETA()
+    print(sta2Sta_ETA)
+    print(Vehicle_ETA)

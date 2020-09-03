@@ -228,6 +228,119 @@ def init_blackboard():
 
 
 class make_eta_from_kafka_until_10min(smach.State):
+    def VehicleInfoProcess(self):
+        """
+        vehicles_info = {
+                            [vechicle id] : {
+                                                [site no]: site id value,
+                                                [passed_station] : passed_station value
+                                            },
+                                .
+                                .
+                        }
+
+        """
+        vehicles_info = {}
+        with open('/vehicles.json') as json_file:
+            vehicles_json = json.load(json_file)
+
+            for index in vehicles_json:
+                vehicles_info.setdefault(index['id'], {})
+                vehicles_info[index['id']].setdefault('passed_station', index['passed_station'])
+                vehicles_info[index['id']].setdefault('site', str(index['site']))
+
+        return vehicles_info
+
+    def StationOrderInfoProcess(self):
+        """
+        stationOrder =
+        {
+            [site Id] : {
+                        [station id] : [next station id],
+                        [station id2] : [next station id2],
+                                .
+                                .
+        }
+        """
+        stationOrder = {}
+
+        """
+        stationOf_Lat_Lon = 
+        {
+            [station id] : { 
+                                "lat" : latitude value,
+                                "lot" : longtitude value
+                            }
+        }
+        """
+        stationOf_Lat_Lon = {}
+
+        """
+        temp_StationOrder2Station = 
+        {
+            [site No]:{
+                        [station order]: [station No],
+                        [station order2]: [station No2],
+            },
+            [site No]:{
+                        .
+                        .
+        """
+        temp_StationOrder2Station = {}
+
+        with open('./stations.json') as json_file:
+            stations_json = json.load(json_file)
+            for stationIndex in stations_json:
+                if stationIndex['site'] not in temp_StationOrder2Station.keys():
+                    # stationOrder.setdefault(stationIndex['site'],{})
+                    temp_StationOrder2Station.setdefault(stationIndex['site'], {})
+                if stationIndex['sta_Order'] and stationIndex['id']:
+                    temp_StationOrder2Station[stationIndex['site']].setdefault(int(stationIndex['sta_Order']), stationIndex['id'])
+
+                # stationOf_Lat_Lon 자료 취득
+                stationOf_Lat_Lon.setdefault(stationIndex['id'], {})
+                stationOf_Lat_Lon[stationIndex['id']].setdefault("lat", stationIndex['lat'])
+                stationOf_Lat_Lon[stationIndex['id']].setdefault("lon", stationIndex['lon'])
+
+        for siteIndex in temp_StationOrder2Station:
+            if not temp_StationOrder2Station[siteIndex]:
+                continue
+
+            if siteIndex not in stationOrder.keys():
+                stationOrder.setdefault(siteIndex, {})
+
+            STATION_COUNT_MAX = max(temp_StationOrder2Station[siteIndex].keys())
+
+            # 만약 코드에 모든 순서가 들어있지 않을 경우 예외 처리
+            if sorted(list(temp_StationOrder2Station[siteIndex].keys())) != list(range(1, STATION_COUNT_MAX + 1)):
+                continue
+
+            for orderIndex in temp_StationOrder2Station[siteIndex]:
+                stationId = temp_StationOrder2Station[siteIndex][orderIndex]
+
+                # 정류장의 순서가 맨 끝일 경우, 맨 첫번째 정류장으로 변경.
+                print(orderIndex, stationId)
+                if orderIndex == STATION_COUNT_MAX:
+                    NextId = temp_StationOrder2Station[siteIndex][1]
+                else:
+                    NextId = temp_StationOrder2Station[siteIndex][orderIndex + 1]
+
+                stationOrder[siteIndex].setdefault(stationId, NextId)
+        return stationOrder, stationOf_Lat_Lon
+
+    def passStation_Update(self, vehicle_no, passed_station):
+        data = {}
+        data["passed_station"] = passed_station
+        url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(vehicle_no)
+        r = requests.request(
+            method='patch',
+            url=url,
+            data=json.dumps(data),
+            auth=auth_ones,
+            verify=None,
+            headers={'Content-type': 'application/json'}
+        )
+
     def __init__(self):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted', 'timeout'],
                              input_keys=['blackboard'],
@@ -240,12 +353,13 @@ class make_eta_from_kafka_until_10min(smach.State):
                                             bootstrap_servers=[self.broker], group_id=self.group,
                                             enable_auto_commit=True, consumer_timeout_ms=600000  # 10min
                                             )
+        self.VehicleInfo = VehicleInfoProcess()
+        Station_order, stationOf_Lat_Lon = StationOrderInfoProcess()
+        self.Station_order = Station_order
+        self.stationOf_Lat_Lon = stationOf_Lat_Lon
 
     def execute(self, ud):
-        stations = None
-        with open('/ws/src/app_to_django/stations.json') as json_file:
-            stations = json.load(json_file)
-
+        self.VehicleInfo = VehicleInfoProcess()
         for msg in self.consumer:
             try:
                 if not len(msg) or not len(msg.value):
@@ -258,31 +372,51 @@ class make_eta_from_kafka_until_10min(smach.State):
                     if packet['type'] != 'gnss':  # only get gnss pacet
                         continue
 
-                lata = 0.0
-                lona = 0.0
-                latb = 0.0
-                lonb = 0.0
-
                 if 'message' in packet:
                     # test
                     # if 'vhcle_id' in packet['message']:
                     #    if packet['message']['vhcle_id'] != 'SCN001':
                     #        continue
+                    # if
+                    # if 'gnss_latitude' in packet['message']:
+                    #     rospy.logdebug('gnss_latitude %f', float(packet['message']['gnss_latitude']))
+                    #     latb = float(packet['message']['gnss_latitude'])
+                    # if 'gnss_longitude' in packet['message']:
+                    #     rospy.logdebug('gnss_longitude %f', float(packet['message']['gnss_longitude']))
+                    #     lonb = float(packet['message']['gnss_longitude'])
+                    # for station in stations:
+                    #     if station['site'] == 2:
+                    #         lata = float(station['lat'])
+                    #         lona = float(station['lon'])
+                    #
+                    #         a = (lata, lona)
+                    #         b = (latb, lonb)
+                    #         # rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
 
-                    if 'gnss_latitude' in packet['message']:
-                        rospy.logdebug('gnss_latitude %f', float(packet['message']['gnss_latitude']))
-                        latb = float(packet['message']['gnss_latitude'])
-                    if 'gnss_longitude' in packet['message']:
-                        rospy.logdebug('gnss_longitude %f', float(packet['message']['gnss_longitude']))
-                        lonb = float(packet['message']['gnss_longitude'])
-                    for station in stations:
-                        if station['site'] == 2:
-                            lata = float(station['lat'])
-                            lona = float(station['lon'])
+                    Essen_Keyword = set(["gnss_latitude", "gnss_longitude", "vhcle_id"])
+                    # 해당 키워드와 패킷의 교집합의 결과가 필요로 하는 필수 키워드와 일치하는 지 확인
+                    if set(packet['message'].keys()).intersection(Essen_Keyword) != Essen_Keyword:
+                        continue
+                    
+                    #차량 정보 획득
+                    vehicle_id = int(packet['message']['vhcle_id'][3:])
+                    vehicle_lat = float(packet['message']['gnss_latitude'])
+                    vehicle_lon = float(packet['message']['gnss_longitude'])
 
-                            a = (lata, lona)
-                            b = (latb, lonb)
-                            # rospy.loginfo("site %d, station %s, %fm", station['site'], station['mid'], great_circle(a, b).m)
+                    # 차량 gps
+                    pos_of_vehicle = (vehicle_lat, vehicle_lon)
+                    siteNo = self.VehicleInfo[vehicle_id]['site']
+                    passed_station = self.VehicleInfo[vehicle_id]['passed_station']
+
+                    NextStation = self.Station_order[siteNo][passed_station]
+                    station_lat = self.stationOf_Lat_Lon[NextStation]['lat']
+                    station_lon = self.stationOf_Lat_Lon[NextStation]['lon']
+                    Pos_of_NextStation = (station_lat, station_lon)
+
+                    #great_circle을 통해 계산된 값이 3보다 작을 경우,
+                    if great_circle(pos_of_vehicle, Pos_of_NextStation).m < 3:
+                        passStation_Update(vehicle_id, NextStation)
+                        rospy.loginfo("vehicle SCN0%d is passed station %d, %fm", vehicle_id, NextStation)
 
                 # rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
                 return 'succeeded'

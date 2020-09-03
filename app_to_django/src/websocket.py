@@ -60,7 +60,7 @@ class Connection(WebSocket):
 class Server(SimpleWebSocketServer):
 
     def __init__(self, queue, host, port, websocketclass):
-        SimpleWebSocketServer.__init__(self, host, port, websocketclass)
+        SimpleWebSocketServer.__init__(self, host, port, websocketclass, selectInterval=0)
         self.queue = queue
 
     def _constructWebSocket(self, sock, address):
