@@ -15,9 +15,6 @@ services:
     environment:
       - "ROS_IP=172.18.0.100"
 
-
-
-
   app_to_django:
     build: ./app_to_django
     container_name: app_to_django
@@ -61,6 +58,7 @@ services:
       - app_to_django
     volumes:
       - ${PWD}/nginx:/ws/src/nginx
+      - ${PWD}/cert/:/ws/src/cert
     restart: always
     # links: 
     #   - "app_to_django:websocket"
