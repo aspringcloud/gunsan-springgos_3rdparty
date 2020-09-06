@@ -241,7 +241,7 @@ class make_eta_from_kafka_until_10min(smach.State):
 
         """
         vehicles_info = {}
-        with open('/vehicles.json') as json_file:
+        with open('/ws/src/app_to_django/vehicles.json') as json_file:
             vehicles_json = json.load(json_file)
 
             for index in vehicles_json:
@@ -288,7 +288,7 @@ class make_eta_from_kafka_until_10min(smach.State):
         """
         temp_StationOrder2Station = {}
 
-        with open('./stations.json') as json_file:
+        with open('/ws/src/app_to_django/stations.json') as json_file:
             stations_json = json.load(json_file)
             for stationIndex in stations_json:
                 if stationIndex['site'] not in temp_StationOrder2Station.keys():
@@ -353,13 +353,13 @@ class make_eta_from_kafka_until_10min(smach.State):
                                             bootstrap_servers=[self.broker], group_id=self.group,
                                             enable_auto_commit=True, consumer_timeout_ms=600000  # 10min
                                             )
-        self.VehicleInfo = VehicleInfoProcess()
-        Station_order, stationOf_Lat_Lon = StationOrderInfoProcess()
+        self.VehicleInfo = self.VehicleInfoProcess()
+        Station_order, stationOf_Lat_Lon = self.StationOrderInfoProcess()
         self.Station_order = Station_order
         self.stationOf_Lat_Lon = stationOf_Lat_Lon
 
     def execute(self, ud):
-        self.VehicleInfo = VehicleInfoProcess()
+        self.VehicleInfo = self.VehicleInfoProcess()
         for msg in self.consumer:
             try:
                 if not len(msg) or not len(msg.value):
@@ -415,7 +415,7 @@ class make_eta_from_kafka_until_10min(smach.State):
 
                     #great_circle을 통해 계산된 값이 3보다 작을 경우,
                     if great_circle(pos_of_vehicle, Pos_of_NextStation).m < 3:
-                        passStation_Update(vehicle_id, NextStation)
+                        self.passStation_Update(vehicle_id, NextStation)
                         rospy.loginfo("vehicle SCN0%d is passed station %d, %fm", vehicle_id, NextStation)
 
                 # rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))

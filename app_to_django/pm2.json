@@ -23,6 +23,14 @@
       "script": "weather.sh",
       "exec_mode": "fork",
       "exec_interpreter": "bash"
+    },
+    {
+      "name": "station_detect",
+      "cwd": "/ws/src/app_to_django/scripts",
+      "args": "",
+      "script": "station_detect.sh",
+      "exec_mode": "fork",
+      "exec_interpreter": "bash"
     }
   ]
 }

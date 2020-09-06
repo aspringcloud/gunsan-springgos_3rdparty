@@ -56,4 +56,4 @@ RUN pip2 install -r ./src/app_to_django/requirements.txt
 RUN /bin/bash -c "source /ros_entrypoint.sh && catkin_make"
 # 아래는 실행 안됨 docker-compose에서 volume을 설정하니 host의 volume이 덮어씌여짐.
 CMD ["chmod",  "777", "/ws/src/app_to_django/src/websocket.py"]
-
+CMD ["chmod",  "777", "/ws/src/app_to_django/src/station_detect.py"]
