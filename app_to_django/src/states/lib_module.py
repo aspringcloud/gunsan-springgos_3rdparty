@@ -8,6 +8,7 @@ Description
 import py_trees
 import smach
 import time
+import datetime
 import rospy
 import std_srvs
 import subprocess
@@ -23,9 +24,10 @@ import Queue
 # added 2020.06.15
 from requests.auth import HTTPBasicAuth
 import kafka
+from kafka import KafkaProducer 
 from geopy.distance import great_circle
 
-from datetime import datetime
+import datetime
 
 # added 2020.6.27 for dust api
 import xmltodict
@@ -241,15 +243,17 @@ class make_eta_from_kafka_until_10min(smach.State):
 
         """
         vehicles_info = {}
+        vhcle_name_to_pk = {}
         with open('/ws/src/app_to_django/vehicles.json') as json_file:
             vehicles_json = json.load(json_file)
 
             for index in vehicles_json:
                 vehicles_info.setdefault(index['id'], {})
                 vehicles_info[index['id']].setdefault('passed_station', index['passed_station'])
-                vehicles_info[index['id']].setdefault('site', str(index['site']))
+                vehicles_info[index['id']].setdefault('site', index['site'])
+                vhcle_name_to_pk.setdefault(index['mid'], index['id'])
 
-        return vehicles_info
+        return vehicles_info, vhcle_name_to_pk
 
     def StationOrderInfoProcess(self):
         """
@@ -327,6 +331,20 @@ class make_eta_from_kafka_until_10min(smach.State):
 
                 stationOrder[siteIndex].setdefault(stationId, NextId)
         return stationOrder, stationOf_Lat_Lon
+    
+
+    def get_vehicle_lat_lon(self, vehicle_id):
+        url = 'https://test.aspringcloud.com/api/vehicles/{}/'.format(vehicle_id)
+        r = requests.request(
+            method='get',
+            url=url,
+            auth=self.auth_ones,
+            verify=None,
+            headers={'Content-type': 'application/json'}
+        )
+        lat = r.json()['lat']
+        lon = r.json()['lon']
+        return lat, lon
 
     def passStation_Update(self, vehicle_no, passed_station):
         data = {}
@@ -336,7 +354,7 @@ class make_eta_from_kafka_until_10min(smach.State):
             method='patch',
             url=url,
             data=json.dumps(data),
-            auth=auth_ones,
+            auth=self.auth_ones,
             verify=None,
             headers={'Content-type': 'application/json'}
         )
@@ -348,23 +366,31 @@ class make_eta_from_kafka_until_10min(smach.State):
 
         self.broker = '175.203.98.23:9092'
         self.topic = 'sgs-kiosk-vehicle'  # sim-vehicle
-        self.group = 'sgs-nifi-consumer005'
+        self.group = 'sgs-nifi-consumer009'
         self.consumer = kafka.KafkaConsumer(self.topic,
                                             bootstrap_servers=[self.broker], group_id=self.group,
                                             enable_auto_commit=True, consumer_timeout_ms=600000  # 10min
                                             )
-        self.VehicleInfo = self.VehicleInfoProcess()
+        self.VehicleInfo, self.vhcle_name_to_pk = self.VehicleInfoProcess()
         Station_order, stationOf_Lat_Lon = self.StationOrderInfoProcess()
         self.Station_order = Station_order
         self.stationOf_Lat_Lon = stationOf_Lat_Lon
+        self.auth_ones = HTTPBasicAuth('bcc@abc.com', 'chlqudcjf')
+        # debug를 위한 출력
+        rospy.loginfo('VehicleInfo{}'.format(self.VehicleInfo))
+        rospy.loginfo('Station_order{}'.format(self.Station_order))
+        rospy.loginfo('stationOf_Lat_Lon{}'.format(self.stationOf_Lat_Lon))
+
+
 
     def execute(self, ud):
-        self.VehicleInfo = self.VehicleInfoProcess()
+        self.VehicleInfo, self.vhcle_name_to_pk = self.VehicleInfoProcess()
         for msg in self.consumer:
             try:
                 if not len(msg) or not len(msg.value):
                     continue
                 packet = json.loads(msg.value)  # string to dictionary
+                # rospy.loginfo('packet:{} '.format(packet))
                 if not isinstance(packet, dict):
                     continue
 
@@ -398,24 +424,41 @@ class make_eta_from_kafka_until_10min(smach.State):
                     if set(packet['message'].keys()).intersection(Essen_Keyword) != Essen_Keyword:
                         continue
                     
+                    # rospy.loginfo('packet:{} '.format(packet))
                     #차량 정보 획득
-                    vehicle_id = int(packet['message']['vhcle_id'][3:])
-                    vehicle_lat = float(packet['message']['gnss_latitude'])
-                    vehicle_lon = float(packet['message']['gnss_longitude'])
+                    rospy.loginfo('low_vehicle_id:{} '.format(packet['message']['vhcle_id']))
+                    rospy.loginfo('vhcles_name:{} '.format(self.vhcle_name_to_pk))
+                    vehicle_id = self.vhcle_name_to_pk[packet['message']['vhcle_id']]
+                    # vehicle_lat = unicode('%0.16f' % packet['message']['gnss_latitude'], 'utf-8')
+                    # vehicle_lon = unicode('%0.16f' % packet['message']['gnss_longitude'], 'uft-8')
+                    # vehicle_lat = packet['message']['gnss_latitude'] + "0000000000"
+                    # vehicle_lon = packet['message']['gnss_longitude'] + "0000000000"
+                    vhicle_lat, vhicle_lon = self.get_vehicle_lat_lon(vehicle_id)
+                    vehicle_lat = packet['message']['gnss_latitude']+'0000000000' 
+                    vehicle_lon = packet['message']['gnss_longitude']+'0000000000'
 
-                    # 차량 gps
-                    pos_of_vehicle = (vehicle_lat, vehicle_lon)
+                    # 차량 gpss
+                    low_pos_of_vehicle = (vehicle_lat, vehicle_lon)
+                    pos_of_vehicle = (vhicle_lat, vhicle_lon)
                     siteNo = self.VehicleInfo[vehicle_id]['site']
+
                     passed_station = self.VehicleInfo[vehicle_id]['passed_station']
 
-                    NextStation = self.Station_order[siteNo][passed_station]
+                    NextStation = self.Station_order[int(siteNo)][int(passed_station)]
+
                     station_lat = self.stationOf_Lat_Lon[NextStation]['lat']
                     station_lon = self.stationOf_Lat_Lon[NextStation]['lon']
                     Pos_of_NextStation = (station_lat, station_lon)
-
+                    rospy.loginfo('low_vehicle:{} {} {}'.format(vehicle_id,pos_of_vehicle,packet['message']['gnss_latitude'],packet['message']['gnss_longitude'] ))
+                    rospy.loginfo('DB vehicle:{} {} {}'.format(vehicle_id,pos_of_vehicle, vehicle_lat, vehicle_lon))
+                    rospy.loginfo('NextStation:{} {}'.format(NextStation,Pos_of_NextStation))
+                   
                     #great_circle을 통해 계산된 값이 3보다 작을 경우,
-                    if great_circle(pos_of_vehicle, Pos_of_NextStation).m < 3:
+                    rospy.loginfo('low_great_circle {}'.format(great_circle(pos_of_vehicle, Pos_of_NextStation).m))
+                    rospy.loginfo('great_circle {}'.format(great_circle(pos_of_vehicle, Pos_of_NextStation).m))
+                    if great_circle(pos_of_vehicle, Pos_of_NextStation).m < 6:
                         self.passStation_Update(vehicle_id, NextStation)
+                        self.VehicleInfo[vehicle_id]['passed_station'] = NextStation
                         rospy.loginfo("vehicle SCN0%d is passed station %d, %fm", vehicle_id, NextStation)
 
                 # rospy.logdebug(json.dumps(packet, indent=4, sort_keys=True))
@@ -548,28 +591,60 @@ class post_event_to_django(smach.State):
         smach.State.__init__(self, outcomes=['succeeded', 'preempted', 'aborted'],
                              input_keys=['blackboard'],
                              output_keys=['blackboard'])
+        self.producer = KafkaProducer(bootstrap_servers='15.165.217.63:9092,3.34.148.168:9092,3.35.40.172:9092', \
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'))
 
     def execute(self, ud):
         how = ud.blackboard.message['how']
+        sender = ud.blackboard.message['who']
         rospy.loginfo('{}, {}'.format(how, ud.blackboard.message))
         data = {}
+        NCluset = {}
+        NCluset['period'] = 'low'
+        NCluset['type'] = 'eventib'
+        NCluset['message'] = {
+            'vhcle_id' : "SCN002",
+            "eib_type": "3",		# 1: 출발, 2 정치, 3. 도착
+            "eib_longitude": "0",   # 경도
+            "eib_latitude": "0",    # 위도
+            "eib_event": "0",		# 01: 장애물, 02 : 사람, 03 : 환경요소, ER : 오류, ET : 기타 > 
+            "eib_note": "0"			# elib_event in set("ER", "ET") // 해당 내용 기입
+        }
+        NCluset["version"] =  2
+
+        
         pk = None
         if 'vehicle_id' in how:
             pk = how['vehicle_id']
 
         if 'type' in how:
             if how['type'] == 'passenger':
-                data['passenger'] = int( how['current_passenger'] - 1 )
+                rospy.loginfo('===>{}'.format(sender))
+                if sender == 'safeGuard' or how['current_passenger'] == 0:
+                    data['passenger'] = int( how['current_passenger'] )
+                elif sender != 'safeGuard' and how['current_passenger'] >= 0:
+                    data['passenger'] = int( how['current_passenger'] - 1 )
+
             if how['type'] == 'power':
                 if how['value'] == "false":
                     data['drive'] = False
+                    data['latest_power_off'] = (datetime.datetime.now() + datetime.timedelta(hours=9)).isoformat()
                 elif how['value'] == 'true':
                     data['drive'] = True
-
+                    data['latest_power_on'] = (datetime.datetime.now() + datetime.timedelta(hours=9)).isoformat()
+                else:
+                    rospy.loginfo("차량 전원 확인 할것 {}".format(pk))
+                    if how['value'] == 'on':
+                        how['value'] = 'true'
+                    elif how['value'] == 'off':
+                        how['value'] = 'false'
+                    else:
+                        rospy.loginfo("전원 에러 {}".format(how))
+                
             if how['type'] == 'parking':
                 data['isparked'] = how['value']
             if how['type'] == 'drive':
-                if how['value'] == 'auto':
+                if how['value'] == 'auto': 
                     data['drive_mode'] = 1
                 elif how['value'] == 'manual':
                     data['drive_mode'] = 2
@@ -581,6 +656,57 @@ class post_event_to_django(smach.State):
             if how['type'] == 'station':
                 data['passed_station'] = how['value']
 
+            # 국클을 위한 플래그
+            if how['type'] == 'reason_stop' and pk == 2:
+                lat_, _lat = how['lat'].split('.')
+                _lat = lat[:6]
+                lat = lat_ + _lat
+
+                lon_, _lon = how['lat'].split('.')
+                _lon = lon[:6]
+                lon = lon_ + _lon
+
+                NCluset['message']["eib_type"] = '2'
+                if how["reason_type"] == 'people':
+                    NCluset["message"]["eib_event"] = "O2"
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+
+                if how['reason_type'] == 'car':
+                    NCluset["message"]["eib_event"] = "O1"
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+
+                if how['reason_type'] == 'environmental factor':
+                    NCluset["message"]["eib_event"] = "O3"
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+
+                if how['reason_type'] == 'error' :
+                    NCluset["message"]["eib_event"] = "ER"
+                    NCluset["message"]["eib_note"] = how["reason"]
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+
+                if how['reason_type'] == 'etc':
+                    NCluset["message"]["eib_event"] = "ET"
+                    NCluset["message"]["eib_note"] = how["reason"]
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+
+                if how['resson_typpe'] == 'start':
+                    NCluset["message"]["eib_type"] = "1"
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+                
+                if how['resson_typpe'] == 'start':
+                    NCluset["message"]["eib_type"] = "3"
+                    NCluset['message']['eib_longitude'] = lon
+                    NCluset['message']['eib_latitude'] = lat
+
+                NCluset["timestamp"] = time.mktime(datetime.datetime.now().timetuple())
+                self.producer.send('sgr-sgs-eventib', NCluset)
+                rospy.loginfo('kafka send : {}'.format(NCluset))
         if not data:
             rospy.loginfo('{}'.format(data))
             rospy.logerr('empty data to post')
@@ -900,7 +1026,7 @@ class get_msg_until_sec(smach.State):
                                 ud.blackboard.message['how'].update({'vehicle_mid': vehicle['mid']})
                                 break
                         ud.blackboard.message['when'] = time.time()
-                        ud.blackboard.message['who'] = 'springgos_sejong_1'
+                        # ud.blackboard.message['who'] = 'springgos_sejong_1'
                         ud.blackboard.message['where'] = 'sejong_datahub'
                         # rospy.logdebug(json.dumps(ud.blackboard.message, indent=4, sort_keys=True))
                         is_validated = True
@@ -1603,9 +1729,9 @@ class get_dust_from_opensite_and_post(smach.State):
         return region1, region3
 
     def DetectNearCites(self, sido, stationName):
-        # 현재 주소를 TM 체계의 좌표로 바꾸기 위한 API 주소
+        # 현재 주소를 TM 체계의 좌���로 바꾸기 위한 API 주소
         GetTMPositon_API = 'http://openapi.airkorea.or.kr/openapi/services/rest/MsrstnInfoInqireSvc/getTMStdrCrdnt'
-        # TM 체계의 주소로 가까운 측정소의 위치를 찾기 위한 API 주소
+        # TM ���계의 주소로 가까운 측정소의 위치를 찾기 위한 API 주소
         GetNearDetector_API = 'http://openapi.airkorea.or.kr/openapi/services/rest/MsrstnInfoInqireSvc/getNearbyMsrstnList'
 
         # 1. 좌표를 얻은 "동"이름으로 TM 좌표를 얻음.

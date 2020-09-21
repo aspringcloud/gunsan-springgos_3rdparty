@@ -60,7 +60,7 @@ def GetStationInfo():
 
             StationInfo[sta_index['site']].setdefault(order, {})
 
-        StationInfo[sta_index['site']][order] = {'station_Id': sta_index['id']}
+        StationInfo[sta_index['site']][order] = {'station_Id': sta_index['id'], 'eta': sta_index['eta']}
         StationGPS.setdefault( sta_index['id'], {'lat': sta_index['lat'], 'lon': sta_index['lon']})
 
     return StationInfo, StationGPS
@@ -77,21 +77,21 @@ def GetVehicleInfo():
     VehicleList = {}
     Site2Vehicles = {}
     for vehicleindex in info:
-        if vehicleindex['drive'] is True:
-            VehicleList.setdefault(vehicleindex['id'], )
-            VehicleList[vehicleindex['id']] = {
-                "drive": vehicleindex['drive'],
-                "mid": vehicleindex['mid'],
-                'state': vehicleindex['state'],
-                "site": vehicleindex['site'],
-                "passed_station": vehicleindex['passed_station'],
-                'wheelbase_speed': vehicleindex['wheelbase_speed'],
-                'lat': vehicleindex['lat'],
-                'lon': vehicleindex['lon']
-            }
-            # site에 소속된 Vehicle 정보 리턴
-            Site2Vehicles.setdefault(vehicleindex['site'], [])
-            Site2Vehicles[vehicleindex['site']].append(vehicleindex['id'])
+        # if vehicleindex['drive'] is True:
+        VehicleList.setdefault(vehicleindex['id'], )
+        VehicleList[vehicleindex['id']] = {
+            "drive": vehicleindex['drive'],
+            "mid": vehicleindex['mid'],
+            'state': vehicleindex['state'],
+            "site": vehicleindex['site'],
+            "passed_station": vehicleindex['passed_station'],
+            'wheelbase_speed': vehicleindex['wheelbase_speed'],
+            'lat': vehicleindex['lat'],
+            'lon': vehicleindex['lon']
+        }
+        # site에 소속된 Vehicle 정보 리턴
+        Site2Vehicles.setdefault(vehicleindex['site'], [])
+        Site2Vehicles[vehicleindex['site']].append(vehicleindex['id'])
 
     # Site2Vehicles의 키값은 None일수 있으며, 해당 데이터는 미 배치된  차량을 의미
     return VehicleList, Site2Vehicles
@@ -144,7 +144,7 @@ def ETA_sta2sta(StationInfo):
             for nextStationIndex in SequecnIndexList:
                 nextStation = StationInfo[SiteIndex][nextStationIndex]['station_Id']
                 # 10은 10km/h 를 의미하며, 이는 저속 운행 시의 시간을 나타냄
-                temp = round(StationDistEachSite[SiteIndex][nextStation] / ( 10 * 16.7 ) )
+                temp = round(StationDistEachSite[SiteIndex][nextStation] / ( 14 * 16.7 ) )
                 if temp == 0:
                     EstimateTime += 1
                 else:
@@ -221,6 +221,10 @@ def EachVehicleETA(VehicleList, Site2Vehicles, sta2staETA, StationInfo, StationG
             if start_stationNo not in Vehicle_ETA.keys():
                 Vehicle_ETA.setdefault(start_stationNo, {})
             Vehicle_ETA[start_stationNo].update({VehicleIndex: abs(round(sta2staETA[NextStation][0][start_stationNo] - weightTime, 0))})
+    # ETA data가 존재하지 않는 사이트가 있을 경우
+    for stationIndex in sta2staETA.keys():
+        if stationIndex not in Vehicle_ETA.keys() :
+            Vehicle_ETA.setdefault(stationIndex, {})
     return Vehicle_ETA
 
 def CalcETA():

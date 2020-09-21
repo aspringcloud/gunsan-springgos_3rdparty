@@ -56,7 +56,7 @@ def main(config):
         # 1. 5초마다 eta 실행
         # 2. stationo에 eta post
         # 3. 1번 반복 
-        smach.StateMachine.add('5sec', sp.preempted_timeout(15), {'succeeded': 'eta'})
+        smach.StateMachine.add('5sec', sp.preempted_timeout(5), {'succeeded': 'eta'})
         smach.StateMachine.add('eta', sp.make_eta_from_kafka_until_10min(), {'succeeded': '5sec'})
     
     '''
